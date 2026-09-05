@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# This repository changes rarely and its pull requests are reviewed by a person; the shared
+# hourly CodeRabbit allowance is counted per developer identity, so a repository that is not
+# gated on review turns auto review off here rather than drawing on the bucket silently.
+language: "en-AU"
+early_access: false
+reviews:
+  auto_review:
+    enabled: false
