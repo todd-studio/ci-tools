@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // The part-registry checks: coverage (every tracked file belongs to exactly one part) and the PR
 // docs answer (a part a change touches either has its pages changed or the PR body says why they
-// are still true). One implementation, two callers — `ws ship` before it opens the PR, and CI on
-// the PR — so the two can never disagree. Dependency-free on purpose: a single file another
-// repository can fetch and run against its own docs-site/parts.json.
+// are still true). One implementation, two callers — a consumer's pre-PR step and its CI — so the
+// two can never disagree. Published from todd-studio/ci-tools: a consumer fetches this file with
+// code-links.mjs, package.json and package-lock.json at one pinned commit and runs it against its
+// own docs-site/parts.json.
 //
 //   docs-parts.mjs coverage [--root <dir>] [--strict]
 //   docs-parts.mjs answer   [--root <dir>] --base <ref> [--head <ref>] (--body-file <path> | --body-env <VAR>)
@@ -22,6 +23,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Where this copy lives, so a finding names a command the consumer can paste wherever it fetched us.
+const SELF = path.relative(process.cwd(), fileURLToPath(import.meta.url));
 const REGISTRY = 'docs-site/parts.json';
 const EXEMPT_FILE = 'docs-site/parts-exempt.json';
 
@@ -196,11 +199,11 @@ export async function links(root) {
       }
       if (!link.recorded) {
         problems.push(
-          `${where}: ${link.relPath}#${link.name} has no fingerprint — run: node scripts/docs-parts.mjs refresh ${page}`,
+          `${where}: ${link.relPath}#${link.name} has no fingerprint — run: node ${SELF} refresh ${page}`,
         );
       } else if (link.recorded !== link.current) {
         problems.push(
-          `${where}: ${link.relPath}#${link.name} changed since the paragraph was confirmed (@${link.recorded}, now @${link.current}) — re-read the paragraph, then: node scripts/docs-parts.mjs refresh ${page}`,
+          `${where}: ${link.relPath}#${link.name} changed since the paragraph was confirmed (@${link.recorded}, now @${link.current}) — re-read the paragraph, then: node ${SELF} refresh ${page}`,
         );
       }
     }
