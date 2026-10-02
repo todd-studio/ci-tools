@@ -11,6 +11,8 @@
 //   docs-parts.mjs links    [--root <dir>]            every code-link fingerprint still matches its function
 //   docs-parts.mjs refresh  [--root <dir>] <page.md>…  re-stamp a page's fingerprints, after re-reading it
 //   docs-parts.mjs boundaries [--root <dir>]          part ownership rules hold; crossings equal the baseline
+// Any command takes --require-registry: a missing docs-site/parts.json (or a wrong --root) is then
+// "cannot decide" (exit 2) instead of "not opted in" (exit 0).
 //
 // `links` and `boundaries` parse JavaScript with acorn and TypeScript with typescript, both pinned in
 // this directory's package-lock.json, so they need `npm ci` here and say so (exit 2) when it is missing
@@ -29,6 +31,9 @@ const REGISTRY = 'docs-site/parts.json';
 const EXEMPT_FILE = 'docs-site/parts-exempt.json';
 
 class Undecided extends Error {}
+
+const noRegistry = (root) =>
+  new Undecided(`no ${REGISTRY} under ${root} — --require-registry will not read that as "nothing to check"`);
 
 function git(root, args) {
   try {
@@ -429,10 +434,11 @@ export async function boundaries(root) {
 }
 
 function parseArgs(argv) {
-  const out = { cmd: argv[0], root: process.cwd(), strict: false };
+  const out = { cmd: argv[0], root: process.cwd(), strict: false, requireRegistry: false };
   for (let i = 1; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--strict') out.strict = true;
+    else if (a === '--require-registry') out.requireRegistry = true;
     else if (['--root', '--base', '--head', '--body-file', '--body-env'].includes(a)) {
       if (i + 1 >= argv.length) throw new Undecided(`${a} needs a value`);
       out[a.slice(2).replace(/-(\w)/g, (_, c) => c.toUpperCase())] = argv[++i];
@@ -447,6 +453,7 @@ export function run(argv, { log = console.log, err = console.error } = {}) {
     o.root = path.resolve(o.root);
     if (o.cmd === 'coverage') {
       const r = coverage(o.root);
+      if (r.skipped && o.requireRegistry) throw noRegistry(o.root);
       if (r.skipped) {
         log(`docs parts: no ${REGISTRY} here — nothing to check`);
         return 0;
@@ -465,6 +472,7 @@ export function run(argv, { log = console.log, err = console.error } = {}) {
       else if (o.bodyEnv in process.env) body = process.env[o.bodyEnv];
       else throw new Undecided(`environment variable ${o.bodyEnv} is not set`);
       const r = answer(o.root, { base: o.base, head: o.head, body });
+      if (r.skipped && o.requireRegistry) throw noRegistry(o.root);
       if (r.skipped) {
         log(`docs parts: no ${REGISTRY} here — nothing to check`);
         return 0;
@@ -498,11 +506,13 @@ export function run(argv, { log = console.log, err = console.error } = {}) {
 export async function runAsync(argv, { log = console.log, err = console.error } = {}) {
   if (!['links', 'refresh', 'boundaries'].includes(argv[0])) return run(argv, { log, err });
   try {
-    const rest = argv.slice(1);
+    const requireRegistry = argv.includes('--require-registry');
+    const rest = argv.slice(1).filter((a) => a !== '--require-registry');
     const rootAt = rest.indexOf('--root');
     const root = path.resolve(rootAt >= 0 ? rest[rootAt + 1] || '' : process.cwd());
     if (rootAt >= 0 && !rest[rootAt + 1]) throw new Undecided('--root needs a value');
     const extra = rest.filter((_, i) => rootAt < 0 || (i !== rootAt && i !== rootAt + 1));
+    if (requireRegistry && !loadParts(root)) throw noRegistry(root);
     if (argv[0] === 'refresh') {
       if (!extra.length) throw new Undecided('refresh needs at least one page');
       for (const line of await refresh(root, extra)) log(`stamped ${line}`);
