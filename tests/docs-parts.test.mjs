@@ -377,3 +377,31 @@ test('a TypeScript link is stamped, then fires when its body changes', async (t)
   put('src/alpha/t.ts', TS.replace('n + 1', 'n + 2'));
   assert.match((await links(dir)).problems.join(), /t\.ts#one changed since/);
 });
+
+test('--require-registry turns a missing registry or wrong --root into exit 2; without it, still exit 0', async (t) => {
+  const { dir } = scratch(t);
+  const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'docs-parts-empty-'));
+  t.after(() => fs.rmSync(empty, { recursive: true, force: true }));
+  git(empty, 'init', '-q');
+  const quiet = { log() {}, err() {} };
+  const { runAsync } = await import('../docs-parts/docs-parts.mjs');
+  const calls = (root) => [
+    ['coverage', '--root', root],
+    ['answer', '--root', root, '--base', 'main', '--body-env', 'PATH'],
+    ['links', '--root', root],
+    ['boundaries', '--root', root],
+  ];
+  for (const argv of calls(empty)) {
+    const bad = [];
+    assert.equal(await runAsync([...argv, '--require-registry'], { ...quiet, err: (m) => bad.push(m) }), 2, argv[0]);
+    assert.match(bad.join('\n'), /cannot decide.*docs-site\/parts\.json/, argv[0]);
+  }
+  for (const argv of calls(path.join(empty, 'nope'))) {
+    assert.equal(await runAsync([...argv, '--require-registry'], quiet), 2, `${argv[0]} wrong root`);
+  }
+  // Backward compatible: without the flag a missing registry is still "not opted in".
+  assert.equal(await runAsync(['coverage', '--root', empty], quiet), 0);
+  assert.equal(await runAsync(['links', '--root', empty], quiet), 0);
+  // With a registry present the flag changes nothing.
+  assert.equal(await runAsync(['coverage', '--root', dir, '--require-registry'], quiet), 0);
+});
