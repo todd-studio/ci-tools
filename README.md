@@ -63,6 +63,8 @@ run downloaded:
 ```
 
 A repository with no `docs-site/parts.json` is treated as not opted in: the checks say so and
-exit 0. A wrong `--root` therefore also reads as not opted in.
+exit 0. A wrong `--root` therefore also reads as not opted in. A consumer that has opted in should
+pass `--require-registry` to any command: a missing registry or wrong `--root` then exits 2
+("cannot decide") instead of passing. The flag is opt-in so pinned consumers keep their behaviour.
 
 Public, no secrets. Originated in todd-studio/workstation's `scripts/docs-parts.mjs` at 762394b9.
