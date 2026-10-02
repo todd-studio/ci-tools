@@ -41,4 +41,4 @@ jobs:
       - name: Install pinned dependencies
         run: npm ci --ignore-scripts --prefix docs-parts
       - name: Prove the checker
-        run: node --test tests/docs-parts.test.mjs
+        run: node --test tests/docs-parts.test.mjs tests/code-links.test.mjs
