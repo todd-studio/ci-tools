@@ -26,3 +26,20 @@ published checksums, never from whatever a download happened to produce.
 
 Originated in todd-studio/workstation (`scripts/ci-fetch.sh`); moved here so every repository
 reads the same file. Workstation's migration to this copy is tracked separately.
+
+## docs-parts/
+
+The shared documentation check, run by `ws ship` and CI in every repository that has a
+`docs-site/parts.json`: part coverage, the pull-request `Docs:` answer, code-link fingerprints and
+boundary rules with a crossings ratchet. What each subcommand does is in the header of
+`docs-parts/docs-parts.mjs`.
+
+Fetch its four files into one directory, at one pinned commit, through `ci-fetch.sh`:
+`docs-parts/docs-parts.mjs`, `code-links.mjs`, `remark-code-links.mjs` and `acorn.mjs`. The `coverage` and `answer` subcommands need nothing else. `links` and `boundaries` read
+JavaScript with acorn, which the consumer installs; `acorn.mjs` looks for it in `$ACORN_PATH`, then by
+name, then `docs-site/node_modules` and `node_modules`. When it finds none the command exits 2: it never
+passes without having read the code.
+
+Originated in todd-studio/workstation (`scripts/docs-parts.mjs`, `docs-site/lib/code-links.mjs`).
+Behaviour stays backward-compatible with that copy; the workstation switch to this one is tracked in
+todd-studio/workstation#2763.

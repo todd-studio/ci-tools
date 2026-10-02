@@ -26,3 +26,18 @@ jobs:
         run: shellcheck ci-fetch.sh tests/ci-fetch.test.sh
       - name: Prove checksum enforcement
         run: bash tests/ci-fetch.test.sh
+
+  docs-parts:
+    name: Docs check (ubuntu-24.04)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install acorn, the one dependency the tests read code with
+        run: npm install --ignore-scripts --no-audit --no-fund --prefix "$RUNNER_TEMP/acorn" acorn@8.16.0
+      - name: Test the docs check
+        env:
+          ACORN_PATH: ${{ runner.temp }}/acorn/node_modules/acorn/dist/acorn.mjs
+        run: node --test tests/
