@@ -87,6 +87,15 @@ test('a fingerprint ignores comments and whitespace but not a changed body', () 
   assert.notEqual(b, fingerprint('f() {\n  echo 2\n}', 'f.sh'));
 });
 
+test('fingerprints use the expected canonical SHA-256 digest for each language', () => {
+  // These literals were calculated from each language's canonical token/text form with SHA-256, not by fingerprint().
+  assert.equal(fingerprint('function f() {\n  return 1;\n}', 'f.mjs'), 'd571bac8b70f');
+  assert.equal(fingerprint('f() {\n  echo 1\n}', 'f.sh'), 'f5a6042efc63');
+  assert.equal(fingerprint('def f():\n    return 1', 'f.py'), '8795b1c438f5');
+  assert.equal(fingerprint('function f(x: number) { return x / 2; }', 'f.ts'), 'dbca27dbd1ce');
+  assert.equal(fingerprint('const C = () => <div> a  b </div>;', 'f.tsx'), '652a5d94c4b0');
+});
+
 test('a reference reads the live file, and cannot leave the repository', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'code-link-'));
   try {
