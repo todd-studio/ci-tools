@@ -68,3 +68,46 @@ pass `--require-registry` to any command: a missing registry or wrong `--root` t
 ("cannot decide") instead of passing. The flag is opt-in so pinned consumers keep their behaviour.
 
 Public, no secrets. Originated in todd-studio/workstation's `scripts/docs-parts.mjs` at 762394b9.
+
+## review-gate/
+
+The `review/gate` commit status every todd-studio repository requires: a pull request whose body
+declares `Lane: ordinary` is green without a reviewer; a guarded or undeclared one is green only on
+`toddreviewer01`'s standing native approval of the exact current head, or of a head this one only
+merges the base branch into. `review-verdict.mjs` is the one guarded-review verdict the gate
+projects; todd-studio/workstation's `ws review wait`, backstop and router use the same file.
+
+A consumer runs it from a `pull_request_target` workflow that checks out its own default branch
+(never the pull request) and fetches both files at a pinned commit, each SHA-256 checked:
+
+    scripts/review-gate.pin          commit <40-hex>
+                                     <sha256>  ci-fetch.sh
+                                     <sha256>  review-gate/review-gate.mjs
+                                     <sha256>  review-gate/review-verdict.mjs
+
+    node "$RUNNER_TEMP/review-gate/review-gate.mjs"     # cwd = the default-branch checkout
+
+Take the hashes once, from a checkout of that exact commit. A fetch that fails or mismatches posts
+nothing, and an absent required context blocks.
+
+What differs between repositories is a setting, never a fork: `.github/review-gate.json` in the
+consumer's default branch. Absent means none. Present but unreadable, malformed or naming an
+unknown key, the gate publishes nothing past `pending`.
+
+```json
+{
+  "guardedFiles": ["scripts/reviewed-destructive-migrations.json"],
+  "guardedEntryPoints": ["scripts/release-pass.cjs"],
+  "dependabot": true
+}
+```
+
+- `guardedFiles`, `guardedEntryPoints`: a change declared ordinary that touches one of these files,
+  or any module an entry point reaches through relative imports, is judged as guarded. The
+  settings file itself is always on that surface.
+- `dependabot`: Dependabot's own change (its app identity, a same-repository head, every commit
+  authored by it and signature-verified) needs no reviewer; required CI stays enforced.
+
+Public, no secrets. Originated in todd-studio/workstation's `scripts/review-gate.mjs` and
+`services/review-verdict.mjs` (WS #3040), with todd-studio/plates-web's surface and Dependabot
+rules as settings.

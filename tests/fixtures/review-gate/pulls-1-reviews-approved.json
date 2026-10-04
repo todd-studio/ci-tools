@@ -1,0 +1,45 @@
+{
+  "source": "gh api repos/todd-studio/workstation/pulls/2277/reviews — captured 2026-09-30 on toddagent01@mac-main (WS #2309)",
+  "reply": [
+    {
+      "id": 5362020688,
+      "node_id": "PRR_kwDOUAQJKs8AAAABP5nxUA",
+      "user": {
+        "login": "toddreviewer01",
+        "id": 328282190,
+        "node_id": "U_kgDOE5EwTg",
+        "avatar_url": "https://avatars.githubusercontent.com/u/328282190?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/toddreviewer01",
+        "html_url": "https://github.com/toddreviewer01",
+        "followers_url": "https://api.github.com/users/toddreviewer01/followers",
+        "following_url": "https://api.github.com/users/toddreviewer01/following{/other_user}",
+        "gists_url": "https://api.github.com/users/toddreviewer01/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/toddreviewer01/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/toddreviewer01/subscriptions",
+        "organizations_url": "https://api.github.com/users/toddreviewer01/orgs",
+        "repos_url": "https://api.github.com/users/toddreviewer01/repos",
+        "events_url": "https://api.github.com/users/toddreviewer01/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/toddreviewer01/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "body": "Independent guarded review of exact head d9cb98eb39973acbacd0d8058700f7498ad03ac1 (delta b13008c...d9cb98eb), against the issue plan in #2275.\n\n**Verdict: APPROVE.** No blocking finding remains.\n\nScope and evidence read:\n\n- The change does exactly what the plan specifies and nothing more: `capacity-probe.mjs` now refuses only when `memoryPressureLevel === PRESSURE_CRITICAL` (4), both in the refusals list (line 250) and, consistently, in the CPU-only re-sample predicate (line 228). Warning (2) is still read, still reported on the reading, and still required to be readable — fail-closed is untouched: `admits` requires `failures.length === 0` and `memoryPressureLevel !== null`, so an unreadable pressure value still refuses.\n- The other guards are provably unchanged and independently exercised at warning level: new tests show swap-outs refuse at level 2 and the free-memory floor refuses at level 2; level-4 refusal and level-2 admission are covered on both mac-host and mac-main fixtures, and the CPU re-sample path was re-pinned to level 4.\n- `fleet_page.py`'s informational note fires only on an otherwise-clean admitting row (`not notes`), so a genuine refusal is never diluted — both shapes are tested. Docstring matches the code.\n- The consciously-kept `PRESSURE_WORDS` 1/2 entries and the `|| memoryPressureLevel` fallback are documented dead-but-complete mapping; an out-of-enum value would now admit rather than refuse, but the sysctl's documented values are exactly 1/2/4 and the plan explicitly chose \"refuse only on critical\". Acceptable as designed.\n- Grep confirms no stale consumer of the old `memory pressure is warning` refusal string remains outside the intentionally updated fixtures; dispatcher/seat-room changes are wording-only.\n- Design doc amendment and `verified_on` stamp match the implementation; CI's \"Docs, secrets, lint and the language suites\" is green on this head.\n\nLocal focused runs (read-only, no dependency install): `capacity-probe.test.mjs` 38/38, `seat-room.test.mjs` 7/7, `control.test_fleet_page` 175/175 — all green. `dispatcher.test.mjs` shows 3 failures in this isolated checkout, all in PR-link rendering (`[owner/repo#n]` linkification), which depends on the optional mdast parser that is deliberately absent without `node_modules` (`markdown.mjs` degrades to plain text by design); unrelated to this delta, and CI is green on this exact head across every required check (`review-settled` exit 0 before submission).\n",
+      "state": "APPROVED",
+      "html_url": "https://github.com/todd-studio/workstation/pull/2277#pullrequestreview-5362020688",
+      "pull_request_url": "https://api.github.com/repos/todd-studio/workstation/pulls/2277",
+      "author_association": "MEMBER",
+      "_links": {
+        "html": {
+          "href": "https://github.com/todd-studio/workstation/pull/2277#pullrequestreview-5362020688"
+        },
+        "pull_request": {
+          "href": "https://api.github.com/repos/todd-studio/workstation/pulls/2277"
+        }
+      },
+      "submitted_at": "2026-09-30T05:55:53Z",
+      "commit_id": "d9cb98eb39973acbacd0d8058700f7498ad03ac1"
+    }
+  ]
+}
