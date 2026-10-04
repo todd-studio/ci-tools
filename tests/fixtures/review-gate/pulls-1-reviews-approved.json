@@ -1,0 +1,45 @@
+{
+  "source": "gh api repos/todd-studio/workstation/pulls/2277/reviews — captured 2026-09-30 on toddagent01@mac-main (WS #2309) — body redacted for this public repository: private review prose, and the gate never reads it",
+  "reply": [
+    {
+      "id": 5362020688,
+      "node_id": "PRR_kwDOUAQJKs8AAAABP5nxUA",
+      "user": {
+        "login": "toddreviewer01",
+        "id": 328282190,
+        "node_id": "U_kgDOE5EwTg",
+        "avatar_url": "https://avatars.githubusercontent.com/u/328282190?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/toddreviewer01",
+        "html_url": "https://github.com/toddreviewer01",
+        "followers_url": "https://api.github.com/users/toddreviewer01/followers",
+        "following_url": "https://api.github.com/users/toddreviewer01/following{/other_user}",
+        "gists_url": "https://api.github.com/users/toddreviewer01/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/toddreviewer01/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/toddreviewer01/subscriptions",
+        "organizations_url": "https://api.github.com/users/toddreviewer01/orgs",
+        "repos_url": "https://api.github.com/users/toddreviewer01/repos",
+        "events_url": "https://api.github.com/users/toddreviewer01/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/toddreviewer01/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "body": "[redacted]",
+      "state": "APPROVED",
+      "html_url": "https://github.com/todd-studio/workstation/pull/2277#pullrequestreview-5362020688",
+      "pull_request_url": "https://api.github.com/repos/todd-studio/workstation/pulls/2277",
+      "author_association": "MEMBER",
+      "_links": {
+        "html": {
+          "href": "https://github.com/todd-studio/workstation/pull/2277#pullrequestreview-5362020688"
+        },
+        "pull_request": {
+          "href": "https://api.github.com/repos/todd-studio/workstation/pulls/2277"
+        }
+      },
+      "submitted_at": "2026-09-30T05:55:53Z",
+      "commit_id": "d9cb98eb39973acbacd0d8058700f7498ad03ac1"
+    }
+  ]
+}
