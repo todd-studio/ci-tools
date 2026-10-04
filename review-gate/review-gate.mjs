@@ -80,8 +80,10 @@ export function readSettings(read) {
 // new dependency joins it only by being imported from a file already on it,
 // and that change is itself guarded. `read` returns a file's text or throws.
 // A specifier naming no file there is text that looks like an import (a
-// comment, a fixture string) and is skipped; any other read failure, and a
-// missing entry point, refuses the whole answer rather than shrinking it.
+// comment, a fixture string) and is skipped — so is an extensionless or
+// directory-index specifier, which Node would resolve and this does not: keep
+// imports on the surface spelled as exact file paths. Any other read failure,
+// and a missing entry point, refuses the whole answer rather than shrinking it.
 export function importClosure(entries, read) {
   const seen = new Set();
   const pending = entries.map((file) => ({ file, isEntry: true }));
@@ -127,8 +129,13 @@ export function guardedTouch(files, surface) {
 
 // Dependabot's own change, attested by GitHub rather than claimed: its app
 // identity, a same-repository head, and every commit (the complete list)
-// authored by it and signature-verified.
+// authored by it, committed by GitHub's web-flow and signature-verified.
+// GitHub verifies the COMMITTER's signature, so authorship alone is a claim
+// anyone pushing to the branch could make with their own signed commit; every
+// Dependabot commit measured (16 plates-web pull requests, 2026-10-05) is
+// committed by web-flow.
 export const DEPENDABOT_ID = 49699333;
+export const WEB_FLOW_ID = 19864447;
 
 export function dependabotAttested(pullRequest, commits) {
   if (pullRequest?.user?.id !== DEPENDABOT_ID || pullRequest?.user?.type !== 'Bot') return false;
@@ -136,7 +143,10 @@ export function dependabotAttested(pullRequest, commits) {
   if (typeof headRepository !== 'number' || headRepository !== pullRequest?.base?.repo?.id) return false;
   if (!Array.isArray(commits) || commits.length === 0 || commits.length !== pullRequest?.commits) return false;
   return commits.every(
-    (commit) => commit?.author?.id === DEPENDABOT_ID && commit?.commit?.verification?.verified === true,
+    (commit) =>
+      commit?.author?.id === DEPENDABOT_ID &&
+      commit?.committer?.id === WEB_FLOW_ID &&
+      commit?.commit?.verification?.verified === true,
   );
 }
 
@@ -352,9 +362,11 @@ export async function main() {
   }
 
   const post = (state, description) => postStatus(head, state, description, pullRequest.html_url);
+  const readCheckout = (file) => readFileSync(file, 'utf8');
+  const headMoved = async () => (await api(`/repos/${repository}/pulls/${pullRequestNumber}`))?.head?.sha !== head;
   let settings;
   try {
-    settings = readSettings((file) => readFileSync(file, 'utf8'));
+    settings = readSettings(readCheckout);
   } catch (error) {
     console.log(`review-gate: the repository's gate settings are unreadable (${error.message}) — pending stands`);
     return;
@@ -365,7 +377,7 @@ export async function main() {
     try {
       touched = guardedTouch(
         await paged(`/repos/${repository}/pulls/${pullRequestNumber}/files`),
-        guardedSurface(settings, (file) => readFileSync(file, 'utf8')),
+        guardedSurface(settings, readCheckout),
       );
     } catch (error) {
       console.log(`review-gate: the guarded-surface check is unreadable (${error.message}) — pending stands`);
@@ -386,8 +398,7 @@ export async function main() {
       console.log(`review-gate: Dependabot attestation is unreadable (${error.message}) — pending stands`);
       return;
     }
-    const current = await api(`/repos/${repository}/pulls/${pullRequestNumber}`);
-    if (current?.head?.sha !== head) {
+    if (await headMoved()) {
       console.log(`review-gate: head moved while Dependabot attestation was read — not publishing on ${head.slice(0, 8)}`);
       return;
     }
@@ -404,8 +415,7 @@ export async function main() {
     console.log(`review-gate: reviewer inventory is unreadable (${error.message}) — pending stands`);
     return;
   }
-  const current = await api(`/repos/${repository}/pulls/${pullRequestNumber}`);
-  if (current?.head?.sha !== head) {
+  if (await headMoved()) {
     console.log(`review-gate: head moved while reviews were read — not publishing on ${head.slice(0, 8)}`);
     return;
   }

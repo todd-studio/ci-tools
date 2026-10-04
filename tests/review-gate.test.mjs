@@ -39,6 +39,9 @@ const review = (head = HEAD, state = 'APPROVED', id = 7, submittedAt = LATE, log
 // field), with every field GitHub actually sends — not the five fields `review()` above guesses at.
 const REAL_APPROVAL = readFixture('review-gate/pulls-1-reviews-approved.json');
 const REAL_HEAD = REAL_APPROVAL[0].commit_id;
+// A real pull-request file list (one entry); `fileNamed` keeps its shape and changes the path.
+const REAL_FILES = readFixture('review-gate/dependabot-pull-actions-checkout-2590-files.json');
+const fileNamed = (filename, extra = {}) => ({ ...REAL_FILES[0], filename, ...extra });
 
 test('lane parsing ignores the template placeholder and multiline comments', () => {
   assert.equal(parseLane('- Lane: <!-- ordinary / guarded -->'), 'undeclared');
@@ -283,7 +286,7 @@ function stubFetch({
   compares = {},
   trees = {},
   comparesFail = false,
-  files = [{ filename: 'README.md', status: 'modified' }],
+  files = REAL_FILES,
   fileStatus = 200,
   commits = [],
   commitStatus = 200,
@@ -681,14 +684,14 @@ test('the closure follows static, re-exported and dynamic relative imports, and 
 
 test('a touch is found by name or by a rename away, and an unprovable list refuses', () => {
   const surface = new Set(['scripts/guarded.mjs']);
-  assert.equal(guardedTouch([{ filename: 'docs/x.md' }], surface), null);
+  assert.equal(guardedTouch([fileNamed('docs/x.md')], surface), null);
   assert.equal(
-    guardedTouch([{ filename: 'scripts/x.mjs', previous_filename: 'scripts/guarded.mjs' }], surface),
+    guardedTouch([fileNamed('scripts/x.mjs', { status: 'renamed', previous_filename: 'scripts/guarded.mjs' })], surface),
     'scripts/guarded.mjs',
   );
   assert.throws(() => guardedTouch(null, surface), /unreadable/);
   assert.throws(
-    () => guardedTouch(Array.from({ length: 3000 }, (_, i) => ({ filename: `f${i}` })), surface),
+    () => guardedTouch(Array.from({ length: 3000 }, (_, i) => fileNamed(`f${i}`)), surface),
     /3000-file cap/,
   );
 });
@@ -700,7 +703,7 @@ const SURFACE_CHECKOUT = {
 
 test('a declared-ordinary change on the configured surface is guarded, whatever the lane says', async (t) => {
   runtimeEnv(t, pullEvent(), SURFACE_CHECKOUT);
-  const touching = [{ filename: 'scripts/rule.mjs', status: 'modified' }];
+  const touching = [fileNamed('scripts/rule.mjs')];
   const unreviewed = stubFetch({ lane: 'ordinary', files: touching });
   await main();
   assert.deepEqual(
@@ -714,14 +717,14 @@ test('a declared-ordinary change on the configured surface is guarded, whatever 
   assert.equal(approved.statuses.at(-1).state, 'success');
   assert.match(approved.statuses.at(-1).description, /exact-head reviewer approval/);
 
-  const elsewhere = stubFetch({ lane: 'ordinary', files: [{ filename: 'docs/x.md' }] });
+  const elsewhere = stubFetch({ lane: 'ordinary', files: [fileNamed('docs/x.md')] });
   await main();
   assert.equal(elsewhere.statuses.at(-1).state, 'success');
 });
 
 test('the settings file is guarded surface even where a repository has none', async (t) => {
   runtimeEnv(t, pullEvent());
-  const { statuses } = stubFetch({ lane: 'ordinary', files: [{ filename: '.github/review-gate.json' }] });
+  const { statuses } = stubFetch({ lane: 'ordinary', files: [fileNamed('.github/review-gate.json')] });
   await main();
   assert.equal(statuses.at(-1).state, 'failure');
   assert.match(statuses.at(-1).description, /review-gate\.json is guarded surface/);
@@ -751,34 +754,36 @@ test('unreadable or unknown settings publish nothing but pending, even for an ap
   }
 });
 
-const DEPENDABOT = { login: 'dependabot[bot]', id: 49699333, type: 'Bot' };
-const dependabotCommit = (overrides = {}) => ({
-  author: { id: DEPENDABOT.id },
-  commit: { verification: { verified: true } },
-  ...overrides,
-});
-const dependabotPull = (overrides = {}) => ({
-  number: 1,
-  html_url: 'https://github.com/o/r/pull/1',
-  body: 'Bumps a dependency.',
-  head: { sha: HEAD, repo: { id: 11 } },
-  base: { ref: 'main', repo: { id: 11 } },
-  user: DEPENDABOT,
-  commits: 1,
-  ...overrides,
-});
+// A real Dependabot pull request, its commit list and its file list, captured from a public
+// repository (each fixture's "source" says where). Variations are spread over the real reply.
+const REAL_DEPENDABOT_PULL = readFixture('review-gate/dependabot-pull-actions-checkout-2590-pull.json');
+const [REAL_DEPENDABOT_COMMIT] = readFixture('review-gate/dependabot-pull-actions-checkout-2590-commits.json');
+const dependabotCommit = (overrides = {}) => ({ ...REAL_DEPENDABOT_COMMIT, ...overrides });
+const dependabotPull = (overrides = {}) => ({ ...REAL_DEPENDABOT_PULL, ...overrides });
 
 test('Dependabot attestation requires its identity, same-repository head, complete commits and signatures', () => {
   assert.equal(dependabotAttested(dependabotPull(), [dependabotCommit()]), true);
-  assert.equal(dependabotAttested(dependabotPull({ user: { ...DEPENDABOT, type: 'User' } }), [dependabotCommit()]), false);
+  const user = REAL_DEPENDABOT_PULL.user;
+  assert.equal(dependabotAttested(dependabotPull({ user: { ...user, type: 'User' } }), [dependabotCommit()]), false);
   assert.equal(
-    dependabotAttested(dependabotPull({ head: { sha: HEAD, repo: { id: 12 } } }), [dependabotCommit()]),
+    dependabotAttested(
+      dependabotPull({ head: { ...REAL_DEPENDABOT_PULL.head, repo: { ...REAL_DEPENDABOT_PULL.head.repo, id: 12 } } }),
+      [dependabotCommit()],
+    ),
     false,
   );
   assert.equal(dependabotAttested(dependabotPull({ commits: 2 }), [dependabotCommit()]), false);
-  assert.equal(dependabotAttested(dependabotPull(), [dependabotCommit({ author: { id: 42 } })]), false);
   assert.equal(
-    dependabotAttested(dependabotPull(), [dependabotCommit({ commit: { verification: { verified: false } } })]),
+    dependabotAttested(dependabotPull(), [dependabotCommit({ author: { ...REAL_DEPENDABOT_COMMIT.author, id: 42 } })]),
+    false,
+  );
+  const unverified = { ...REAL_DEPENDABOT_COMMIT.commit, verification: { ...REAL_DEPENDABOT_COMMIT.commit.verification, verified: false } };
+  assert.equal(dependabotAttested(dependabotPull(), [dependabotCommit({ commit: unverified })]), false);
+  // Someone else's signed commit claiming Dependabot as author: GitHub verifies the committer.
+  assert.equal(
+    dependabotAttested(dependabotPull(), [
+      dependabotCommit({ committer: { ...REAL_DEPENDABOT_COMMIT.committer, login: 'someone', id: 42 } }),
+    ]),
     false,
   );
   assert.equal(dependabotAttested(dependabotPull(), []), false);
@@ -791,7 +796,10 @@ test("an attested Dependabot change is green only where the repository's setting
   assert.equal(allowed.statuses.at(-1).state, 'success');
   assert.match(allowed.statuses.at(-1).description, /Dependabot's own attested change/);
 
-  const mixed = stubFetch({ pull: dependabotPull(), commits: [dependabotCommit({ author: { id: 42 } })] });
+  const mixed = stubFetch({
+    pull: dependabotPull(),
+    commits: [dependabotCommit({ author: { ...REAL_DEPENDABOT_COMMIT.author, id: 42 } })],
+  });
   await main();
   assert.equal(mixed.statuses.at(-1).state, 'failure');
 

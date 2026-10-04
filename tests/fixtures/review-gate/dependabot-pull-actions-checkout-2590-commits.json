@@ -1,0 +1,87 @@
+{
+  "source": "gh api repos/actions/checkout/pulls/2590/commits — captured 2026-10-05 on toddagent01@mac-main (WS #3040; a public repository's Dependabot pull request)",
+  "reply": [
+    {
+      "sha": "384ec1874287eccce8e9af4362bf8096f614c5f8",
+      "node_id": "C_kwDOC8ppZdoAKDM4NGVjMTg3NDI4N2VjY2NlOGU5YWY0MzYyYmY4MDk2ZjYxNGM1Zjg",
+      "commit": {
+        "author": {
+          "name": "dependabot[bot]",
+          "email": "49699333+dependabot[bot]@users.noreply.github.com",
+          "date": "2026-09-29T02:52:25Z"
+        },
+        "committer": {
+          "name": "GitHub",
+          "email": "noreply@github.com",
+          "date": "2026-09-29T02:52:25Z"
+        },
+        "message": "Bump undici from 6.27.0 to 6.29.0\n\nBumps [undici](https://github.com/nodejs/undici) from 6.27.0 to 6.29.0.\n- [Release notes](https://github.com/nodejs/undici/releases)\n- [Commits](https://github.com/nodejs/undici/compare/v6.27.0...v6.29.0)\n\n---\nupdated-dependencies:\n- dependency-name: undici\n  dependency-version: 6.29.0\n  dependency-type: indirect\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+        "tree": {
+          "sha": "d1158982e4e3144428338da436c251a1ade506e7",
+          "url": "https://api.github.com/repos/actions/checkout/git/trees/d1158982e4e3144428338da436c251a1ade506e7"
+        },
+        "url": "https://api.github.com/repos/actions/checkout/git/commits/384ec1874287eccce8e9af4362bf8096f614c5f8",
+        "comment_count": 0,
+        "verification": {
+          "verified": true,
+          "reason": "valid",
+          "signature": "-----BEGIN PGP SIGNATURE-----\n\nwsFcBAABCAAQBQJquyfqCRC1aQ7uu5UhlAAAI2sQAB7I0JbU2NB6mpO72oVt5TAL\nt12JS45GKUe7cA3fkQM7/8eu0N8lz27XfyF6/PF1trPC+s9QP8x4PY1O8qNxeG4U\nh2BglqjvqbJgMbMoV/XgIxKyvOla1QRrzNVFQUkCcGvQ/zLwe2doRdnF8o/wOwRK\nrlBbr+MVKHALVIif+lEbbCf68M8QOtqLj/MAyt5SlhZENUNTbRuJMy+j7YPOHVlV\nBsrhHz/WUVEVsxD/Vjy48+RGt1v83U4oT6YRkzgk2ObOVp/Gd3HjcrkX1QgmgcIc\nJax9hmP1OWOTQj1x0tx2jboAdNYyEHpWD4eokxIXky2UIfA3sFjhB97PgMzAVVmS\n78s9SGYuY6+fvYqpu40LY0lqKTpGRXExey0ShNdQgL52AoXPukqJiEIZaJk7B16G\nDZdQnTUKPd98q6XjhR6irq/WyAz+CyZvrSEnV8/izwMw5x6POF0oOnTVzmytDE8x\nN2HGiE3DS0Ny8t/dGUE5ktDBwoNZpG89wFA6LZi5ay3kRN9GmBQOYbQnS8FEvHzZ\nmiEjfiXxmEJiwneLOAa+rO8MgkmXQcwc8JkpzrFSGmZYmY9y2i8YB4B6ggSGTNbn\nLhumZIbBknrfMQvGJTRB3QSP6T0GnJmQhFRt/nOH0UjfXiYJ1hU3cB+0PG8z97Ae\n4i3iA4CsPfefLh4HURCe\n=VrkO\n-----END PGP SIGNATURE-----\n",
+          "payload": "tree d1158982e4e3144428338da436c251a1ade506e7\nparent f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a\nauthor dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com> 1790650345 +0000\ncommitter GitHub <noreply@github.com> 1790650345 +0000\n\nBump undici from 6.27.0 to 6.29.0\n\nBumps [undici](https://github.com/nodejs/undici) from 6.27.0 to 6.29.0.\n- [Release notes](https://github.com/nodejs/undici/releases)\n- [Commits](https://github.com/nodejs/undici/compare/v6.27.0...v6.29.0)\n\n---\nupdated-dependencies:\n- dependency-name: undici\n  dependency-version: 6.29.0\n  dependency-type: indirect\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+          "verified_at": "2026-09-29T02:52:27Z"
+        }
+      },
+      "url": "https://api.github.com/repos/actions/checkout/commits/384ec1874287eccce8e9af4362bf8096f614c5f8",
+      "html_url": "https://github.com/actions/checkout/commit/384ec1874287eccce8e9af4362bf8096f614c5f8",
+      "comments_url": "https://api.github.com/repos/actions/checkout/commits/384ec1874287eccce8e9af4362bf8096f614c5f8/comments",
+      "author": {
+        "login": "dependabot[bot]",
+        "id": 49699333,
+        "node_id": "MDM6Qm90NDk2OTkzMzM=",
+        "avatar_url": "https://avatars.githubusercontent.com/in/29110?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/dependabot%5Bbot%5D",
+        "html_url": "https://github.com/apps/dependabot",
+        "followers_url": "https://api.github.com/users/dependabot%5Bbot%5D/followers",
+        "following_url": "https://api.github.com/users/dependabot%5Bbot%5D/following{/other_user}",
+        "gists_url": "https://api.github.com/users/dependabot%5Bbot%5D/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/dependabot%5Bbot%5D/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/dependabot%5Bbot%5D/subscriptions",
+        "organizations_url": "https://api.github.com/users/dependabot%5Bbot%5D/orgs",
+        "repos_url": "https://api.github.com/users/dependabot%5Bbot%5D/repos",
+        "events_url": "https://api.github.com/users/dependabot%5Bbot%5D/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/dependabot%5Bbot%5D/received_events",
+        "type": "Bot",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "web-flow",
+        "id": 19864447,
+        "node_id": "MDQ6VXNlcjE5ODY0NDQ3",
+        "avatar_url": "https://avatars.githubusercontent.com/u/19864447?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/web-flow",
+        "html_url": "https://github.com/web-flow",
+        "followers_url": "https://api.github.com/users/web-flow/followers",
+        "following_url": "https://api.github.com/users/web-flow/following{/other_user}",
+        "gists_url": "https://api.github.com/users/web-flow/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/web-flow/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/web-flow/subscriptions",
+        "organizations_url": "https://api.github.com/users/web-flow/orgs",
+        "repos_url": "https://api.github.com/users/web-flow/repos",
+        "events_url": "https://api.github.com/users/web-flow/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/web-flow/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a",
+          "url": "https://api.github.com/repos/actions/checkout/commits/f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a",
+          "html_url": "https://github.com/actions/checkout/commit/f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a"
+        }
+      ]
+    }
+  ]
+}

@@ -96,17 +96,26 @@ unknown key, the gate publishes nothing past `pending`.
 
 ```json
 {
-  "guardedFiles": ["scripts/reviewed-destructive-migrations.json"],
-  "guardedEntryPoints": ["scripts/release-pass.cjs"],
+  "guardedFiles": [
+    "scripts/reviewed-destructive-migrations.json",
+    "ecosystem.main-live.config.cjs",
+    ".github/workflows/review-gate.yml",
+    "scripts/review-gate.pin"
+  ],
+  "guardedEntryPoints": ["scripts/release-pass.cjs", "scripts/release-scheduler.mjs"],
   "dependabot": true
 }
 ```
 
 - `guardedFiles`, `guardedEntryPoints`: a change declared ordinary that touches one of these files,
-  or any module an entry point reaches through relative imports, is judged as guarded. The
-  settings file itself is always on that surface.
+  or a module an entry point reaches through relative import specifiers spelled as exact file
+  paths, is judged as guarded (an extensionless or directory specifier is not followed). The
+  settings file itself is always on that surface; list the gate's own workflow and pin to keep an
+  ordinary change from moving the gate.
 - `dependabot`: Dependabot's own change (its app identity, a same-repository head, every commit
-  authored by it and signature-verified) needs no reviewer; required CI stays enforced.
+  authored by it, committed by GitHub's web-flow and signature-verified) needs no reviewer; required
+  CI stays enforced. It is checked before the guarded surface's reviewer requirement, so an attested
+  Dependabot change is green even where it touches the surface.
 
 Public, no secrets. Originated in todd-studio/workstation's `scripts/review-gate.mjs` and
 `services/review-verdict.mjs` (WS #3040), with todd-studio/plates-web's surface and Dependabot

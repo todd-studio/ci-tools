@@ -1,0 +1,17 @@
+{
+  "source": "gh api repos/actions/checkout/pulls/2590/files — captured 2026-10-05 on toddagent01@mac-main (WS #3040; a public repository's Dependabot pull request)",
+  "reply": [
+    {
+      "sha": "4705945f439e25612ac5ee008e74814a53d2db21",
+      "filename": "package-lock.json",
+      "status": "modified",
+      "additions": 3,
+      "deletions": 3,
+      "changes": 6,
+      "blob_url": "https://github.com/actions/checkout/blob/384ec1874287eccce8e9af4362bf8096f614c5f8/package-lock.json",
+      "raw_url": "https://github.com/actions/checkout/raw/384ec1874287eccce8e9af4362bf8096f614c5f8/package-lock.json",
+      "contents_url": "https://api.github.com/repos/actions/checkout/contents/package-lock.json?ref=384ec1874287eccce8e9af4362bf8096f614c5f8",
+      "patch": "@@ -7814,9 +7814,9 @@\n       }\n     },\n     \"node_modules/undici\": {\n-      \"version\": \"6.27.0\",\n-      \"resolved\": \"https://registry.npmjs.org/undici/-/undici-6.27.0.tgz\",\n-      \"integrity\": \"sha512-YmfV3YnEDzXRC5lZ2jWtWWHKGUm1zIt8AhesR1tens+HTNv+YZlN/dp6G727LOvMJ8xjP9Be7Y2Sdr96LDm+pg==\",\n+      \"version\": \"6.29.0\",\n+      \"resolved\": \"https://registry.npmjs.org/undici/-/undici-6.29.0.tgz\",\n+      \"integrity\": \"sha512-R+RODBqp6i2pPflGdq+xIOUkl+RNfGgHwoinecKu/JCuf2uO06cOKoDbI2P7Dn6KcswdKwrczbU6IYJ6K8X+wg==\",\n       \"license\": \"MIT\",\n       \"engines\": {\n         \"node\": \">=18.17\""
+    }
+  ]
+}
