@@ -375,7 +375,11 @@ export async function main() {
     return;
   }
   const lane = parseLane(pullRequest.body);
-  if (settings.ciOnly && lane !== 'undeclared') {
+  if (settings.ciOnly) {
+    if (lane === 'undeclared') {
+      await post('failure', 'ci-only: no readable Lane declaration');
+      return;
+    }
     await post('success', 'ci-only: declared lane permits merge on required CI');
     return;
   }
