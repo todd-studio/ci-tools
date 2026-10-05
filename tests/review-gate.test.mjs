@@ -418,6 +418,21 @@ test('the ci-only setting refuses unreadable declarations before it reads review
   }
 });
 
+test('without ci-only, an unreadable declaration still reaches reviewer evaluation', async (t) => {
+  runtimeEnv(t, pullEvent(), { settings: { ciOnly: false } });
+  const { statuses, calls } = stubFetch({ body: null, reviews: [review()] });
+  await main();
+  assert.deepEqual(
+    statuses.map(({ state }) => state),
+    ['pending', 'success'],
+  );
+  assert.match(statuses.at(-1).description, /guarded: exact-head reviewer approval/);
+  assert.equal(
+    calls.some(([path]) => path.includes('/reviews')),
+    true,
+  );
+});
+
 test('guarded succeeds only on the exact-head reviewer approval', async (t) => {
   runtimeEnv(t, pullEvent(REAL_HEAD));
   const { statuses } = stubFetch({ heads: [REAL_HEAD, REAL_HEAD], reviews: REAL_APPROVAL });
