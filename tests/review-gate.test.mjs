@@ -282,6 +282,7 @@ function runtimeEnv(t, event, { settings, files = {} } = {}) {
 
 function stubFetch({
   lane = 'guarded',
+  body = lane === null ? null : `- Lane: ${lane}`,
   heads = [HEAD, HEAD],
   author = 'author',
   reviews = [],
@@ -340,7 +341,7 @@ function stubFetch({
         head: { sha: head },
         base: { ref: base },
         user: author === null ? null : { login: author, id: 42, type: 'User' },
-        body: lane === null ? null : `- Lane: ${lane}`,
+        body,
         html_url: 'https://github.com/o/r/pull/1',
       });
     }
@@ -393,15 +394,43 @@ test('the ci-only setting accepts a readable guarded declaration without reviewe
   );
 });
 
-test('the ci-only setting does not make an unreadable declaration green', async (t) => {
-  runtimeEnv(t, pullEvent(), { settings: { ciOnly: true } });
-  const { statuses } = stubFetch({ lane: 'unrecognised', reviews: [] });
+test('the ci-only setting refuses unreadable declarations before it reads reviewer evidence', async (t) => {
+  for (const [name, body] of [
+    ['missing', null],
+    ['malformed', '- Lane: expedient'],
+    ['placeholder', '- Lane: <!-- ordinary / guarded -->'],
+    ['ambiguous', '- Lane: ordinary\n- Lane: guarded'],
+  ]) {
+    await t.test(name, async (st) => {
+      runtimeEnv(st, pullEvent(), { settings: { ciOnly: true } });
+      const { statuses, calls } = stubFetch({ body, reviews: [review()] });
+      await main();
+      assert.deepEqual(
+        statuses.map(({ state }) => state),
+        ['pending', 'failure'],
+      );
+      assert.equal(statuses.at(-1).description, 'ci-only: no readable Lane declaration');
+      assert.equal(
+        calls.some(([path]) => path.includes('/reviews')),
+        false,
+      );
+    });
+  }
+});
+
+test('without ci-only, an unreadable declaration still reaches reviewer evaluation', async (t) => {
+  runtimeEnv(t, pullEvent(), { settings: { ciOnly: false } });
+  const { statuses, calls } = stubFetch({ body: null, reviews: [review()] });
   await main();
   assert.deepEqual(
     statuses.map(({ state }) => state),
-    ['pending', 'failure'],
+    ['pending', 'success'],
   );
-  assert.match(statuses.at(-1).description, /no readable Lane declaration \(treated as guarded\)/);
+  assert.match(statuses.at(-1).description, /guarded: exact-head reviewer approval/);
+  assert.equal(
+    calls.some(([path]) => path.includes('/reviews')),
+    true,
+  );
 });
 
 test('guarded succeeds only on the exact-head reviewer approval', async (t) => {
