@@ -49,11 +49,16 @@ test('lane parsing ignores the template placeholder and multiline comments', () 
   assert.equal(parseLane('<!--\n- Lane: ordinary\n'), 'undeclared');
 });
 
-test('lane parsing accepts only a bare first lane token', () => {
+test('lane parsing accepts only a bare lane token', () => {
   assert.equal(parseLane('- Lane: ordinary, docs only'), 'ordinary');
   assert.equal(parseLane('- Lane: guarded (security)'), 'guarded');
   assert.equal(parseLane('- Lane: maybe ordinary'), 'undeclared');
   assert.equal(parseLane(null), 'undeclared');
+});
+
+test('lane parsing refuses competing declarations', () => {
+  assert.equal(parseLane('- Lane: ordinary\n- Lane: guarded'), 'undeclared');
+  assert.equal(parseLane('- Lane: ordinary\n- Lane: ordinary'), 'undeclared');
 });
 
 test('the latest decisive exact-head native review wins', () => {

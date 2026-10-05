@@ -22,7 +22,9 @@ const RFC3339 = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))
 
 export function parseLane(body) {
   const cleaned = (body ?? '').replace(/<!--[\s\S]*?(?:-->|$)/g, '');
-  const line = cleaned.split('\n').find((candidate) => /^\s*-?\s*Lane\s*:/i.test(candidate)) ?? '';
+  const lines = cleaned.split('\n').filter((candidate) => /^\s*-?\s*Lane\s*:/i.test(candidate));
+  if (lines.length !== 1) return 'undeclared';
+  const [line] = lines;
   const value = line.replace(/^[\s-]*Lane\s*:\s*/i, '').trim();
   const token = (value.match(/^([A-Za-z][A-Za-z-]*)/) ?? [])[1]?.toLowerCase();
   if (token === 'ordinary') return 'ordinary';
