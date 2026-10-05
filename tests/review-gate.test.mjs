@@ -49,11 +49,16 @@ test('lane parsing ignores the template placeholder and multiline comments', () 
   assert.equal(parseLane('<!--\n- Lane: ordinary\n'), 'undeclared');
 });
 
-test('lane parsing accepts only a bare first lane token', () => {
+test('lane parsing accepts only a bare lane token', () => {
   assert.equal(parseLane('- Lane: ordinary, docs only'), 'ordinary');
   assert.equal(parseLane('- Lane: guarded (security)'), 'guarded');
   assert.equal(parseLane('- Lane: maybe ordinary'), 'undeclared');
   assert.equal(parseLane(null), 'undeclared');
+});
+
+test('lane parsing refuses competing declarations', () => {
+  assert.equal(parseLane('- Lane: ordinary\n- Lane: guarded'), 'undeclared');
+  assert.equal(parseLane('- Lane: ordinary\n- Lane: ordinary'), 'undeclared');
 });
 
 test('the latest decisive exact-head native review wins', () => {
@@ -373,6 +378,32 @@ test('ordinary succeeds without any reviewer or CodeRabbit read', async (t) => {
   );
 });
 
+test('the ci-only setting accepts a readable guarded declaration without reviewer evidence', async (t) => {
+  runtimeEnv(t, pullEvent(), { settings: { ciOnly: true } });
+  const { statuses, calls } = stubFetch({ lane: 'guarded' });
+  await main();
+  assert.deepEqual(
+    statuses.map(({ state }) => state),
+    ['pending', 'success'],
+  );
+  assert.equal(statuses.at(-1).description, 'ci-only: declared lane permits merge on required CI');
+  assert.equal(
+    calls.some(([path]) => path.includes('/reviews')),
+    false,
+  );
+});
+
+test('the ci-only setting does not make an unreadable declaration green', async (t) => {
+  runtimeEnv(t, pullEvent(), { settings: { ciOnly: true } });
+  const { statuses } = stubFetch({ lane: 'unrecognised', reviews: [] });
+  await main();
+  assert.deepEqual(
+    statuses.map(({ state }) => state),
+    ['pending', 'failure'],
+  );
+  assert.match(statuses.at(-1).description, /no readable Lane declaration \(treated as guarded\)/);
+});
+
 test('guarded succeeds only on the exact-head reviewer approval', async (t) => {
   runtimeEnv(t, pullEvent(REAL_HEAD));
   const { statuses } = stubFetch({ heads: [REAL_HEAD, REAL_HEAD], reviews: REAL_APPROVAL });
@@ -633,18 +664,20 @@ test('absent settings are none; unknown keys, bad paths and unreadable files ref
   const enoent = () => {
     throw Object.assign(new Error('no file'), { code: 'ENOENT' });
   };
-  assert.deepEqual(readSettings(enoent), { guardedFiles: [], guardedEntryPoints: [], dependabot: false });
+  assert.deepEqual(readSettings(enoent), { guardedFiles: [], guardedEntryPoints: [], dependabot: false, ciOnly: false });
   const from = (text) => () => text;
-  assert.deepEqual(readSettings(from('{"guardedFiles":["a/b.json"],"dependabot":true}')), {
+  assert.deepEqual(readSettings(from('{"guardedFiles":["a/b.json"],"dependabot":true,"ciOnly":true}')), {
     guardedFiles: ['a/b.json'],
     guardedEntryPoints: [],
     dependabot: true,
+    ciOnly: true,
   });
   assert.throws(() => readSettings(from('{"guardedFile":["a"]}')), /unknown setting: guardedFile/);
   assert.throws(() => readSettings(from('{"guardedFiles":["../x"]}')), /repository-relative/);
   assert.throws(() => readSettings(from('{"guardedFiles":["/etc/x"]}')), /repository-relative/);
   assert.throws(() => readSettings(from('{"guardedEntryPoints":"a.mjs"}')), /repository-relative/);
   assert.throws(() => readSettings(from('{"dependabot":"yes"}')), /true or false/);
+  assert.throws(() => readSettings(from('{"ciOnly":"yes"}')), /true or false/);
   assert.throws(() => readSettings(from('[]')), /not an object/);
   assert.throws(() => readSettings(from('{not json')), SyntaxError);
   assert.throws(

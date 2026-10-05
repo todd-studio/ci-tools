@@ -103,7 +103,8 @@ unknown key, the gate publishes nothing past `pending`.
     "scripts/review-gate.pin"
   ],
   "guardedEntryPoints": ["scripts/release-pass.cjs", "scripts/release-scheduler.mjs"],
-  "dependabot": true
+  "dependabot": true,
+  "ciOnly": false
 }
 ```
 
@@ -116,6 +117,9 @@ unknown key, the gate publishes nothing past `pending`.
   authored by it, committed by GitHub's web-flow and signature-verified) needs no reviewer; required
   CI stays enforced. It is checked before the guarded surface's reviewer requirement, so an attested
   Dependabot change is green even where it touches the surface.
+- `ciOnly`: a readable `ordinary` or `guarded` declaration needs no reviewer; required CI remains
+  independently enforced. Missing, malformed, placeholder, or ambiguous declarations still follow
+  the blocking reviewer path. It defaults to `false`, preserving the shared gate's normal review policy.
 
 Public, no secrets. Originated in todd-studio/workstation's `scripts/review-gate.mjs` and
 `services/review-verdict.mjs` (WS #3040), with todd-studio/plates-web's surface and Dependabot

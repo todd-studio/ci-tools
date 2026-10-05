@@ -38,10 +38,11 @@ const FULL_SHA = /^[0-9a-f]{40}$/;
 //   guardedFiles        paths a declared-ordinary change may not touch unreviewed
 //   guardedEntryPoints  modules whose whole relative-import closure joins them
 //   dependabot          Dependabot's own attested change needs no reviewer
+//   ciOnly              a readable lane declaration needs no reviewer
 // The settings file is always on the guarded surface itself, so loosening or
 // deleting it is never an ordinary change.
 export const SETTINGS_PATH = '.github/review-gate.json';
-const SETTING_KEYS = new Set(['guardedFiles', 'guardedEntryPoints', 'dependabot']);
+const SETTING_KEYS = new Set(['guardedFiles', 'guardedEntryPoints', 'dependabot', 'ciOnly']);
 
 const repositoryPath = (value) =>
   typeof value === 'string' &&
@@ -55,7 +56,7 @@ export function readSettings(read) {
   try {
     text = read(SETTINGS_PATH);
   } catch (error) {
-    if (error?.code === 'ENOENT') return { guardedFiles: [], guardedEntryPoints: [], dependabot: false };
+    if (error?.code === 'ENOENT') return { guardedFiles: [], guardedEntryPoints: [], dependabot: false, ciOnly: false };
     throw error;
   }
   const settings = JSON.parse(text);
@@ -71,7 +72,9 @@ export function readSettings(read) {
   };
   const dependabot = settings.dependabot ?? false;
   if (typeof dependabot !== 'boolean') throw new Error(`${SETTINGS_PATH}: dependabot must be true or false`);
-  return { guardedFiles: paths('guardedFiles'), guardedEntryPoints: paths('guardedEntryPoints'), dependabot };
+  const ciOnly = settings.ciOnly ?? false;
+  if (typeof ciOnly !== 'boolean') throw new Error(`${SETTINGS_PATH}: ciOnly must be true or false`);
+  return { guardedFiles: paths('guardedFiles'), guardedEntryPoints: paths('guardedEntryPoints'), dependabot, ciOnly };
 }
 
 // Every repository file reachable from `entries` through relative import,
@@ -372,6 +375,10 @@ export async function main() {
     return;
   }
   const lane = parseLane(pullRequest.body);
+  if (settings.ciOnly && lane !== 'undeclared') {
+    await post('success', 'ci-only: declared lane permits merge on required CI');
+    return;
+  }
   let touched = null;
   if (lane === 'ordinary') {
     try {
