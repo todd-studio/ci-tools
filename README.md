@@ -119,7 +119,9 @@ unknown key, the gate publishes nothing past `pending`.
   Dependabot change is green even where it touches the surface.
 - `ciOnly`: a readable `ordinary` or `guarded` declaration needs no reviewer; required CI remains
   independently enforced. Missing, malformed, placeholder, or ambiguous declarations fail without reading
-  reviewer evidence. It defaults to `false`, preserving the shared gate's normal review policy.
+  reviewer evidence, except an attested Dependabot change where `dependabot` is also set: Dependabot
+  never declares a lane, so its attestation is checked first. It defaults to `false`, preserving the
+  shared gate's normal review policy.
 
 Public, no secrets. Originated in todd-studio/workstation's `scripts/review-gate.mjs` and
 `services/review-verdict.mjs` (WS #3040), with todd-studio/plates-web's surface and Dependabot

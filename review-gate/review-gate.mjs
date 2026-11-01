@@ -374,9 +374,32 @@ export async function main() {
     console.log(`review-gate: the repository's gate settings are unreadable (${error.message}) — pending stands`);
     return;
   }
+  // Dependabot's own attested change needs no reviewer where the repository
+  // allows it. True once this has settled the gate: published success, or left
+  // pending standing because the attestation was unreadable or the head moved.
+  const settledAsDependabot = async () => {
+    if (!settings.dependabot || pullRequest.user.id !== DEPENDABOT_ID) return false;
+    let commits;
+    try {
+      commits = await paged(`/repos/${repository}/pulls/${pullRequestNumber}/commits`);
+    } catch (error) {
+      console.log(`review-gate: Dependabot attestation is unreadable (${error.message}) — pending stands`);
+      return true;
+    }
+    if (await headMoved()) {
+      console.log(`review-gate: head moved while Dependabot attestation was read — not publishing on ${head.slice(0, 8)}`);
+      return true;
+    }
+    if (!dependabotAttested(pullRequest, commits)) return false;
+    await post('success', "Dependabot's own attested change; required CI is independently enforced");
+    return true;
+  };
   const lane = parseLane(pullRequest.body);
   if (settings.ciOnly) {
     if (lane === 'undeclared') {
+      // Dependabot never declares a lane, so its attestation is the one way an
+      // undeclared change passes here.
+      if (await settledAsDependabot()) return;
       await post('failure', 'ci-only: no readable Lane declaration');
       return;
     }
@@ -401,23 +424,7 @@ export async function main() {
     console.log(`review-gate: declared ordinary, but the change touches ${touched} — treated as guarded`);
   }
 
-  if (settings.dependabot && pullRequest.user.id === DEPENDABOT_ID) {
-    let commits;
-    try {
-      commits = await paged(`/repos/${repository}/pulls/${pullRequestNumber}/commits`);
-    } catch (error) {
-      console.log(`review-gate: Dependabot attestation is unreadable (${error.message}) — pending stands`);
-      return;
-    }
-    if (await headMoved()) {
-      console.log(`review-gate: head moved while Dependabot attestation was read — not publishing on ${head.slice(0, 8)}`);
-      return;
-    }
-    if (dependabotAttested(pullRequest, commits)) {
-      await post('success', "Dependabot's own attested change; required CI is independently enforced");
-      return;
-    }
-  }
+  if (await settledAsDependabot()) return;
 
   let reviews;
   try {

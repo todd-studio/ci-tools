@@ -873,6 +873,50 @@ test("an attested Dependabot change is green only where the repository's setting
   );
 });
 
+test("a ci-only repository's Dependabot setting greens an attested change that declares no lane", async (t) => {
+  runtimeEnv(t, pullEvent(), { settings: { ciOnly: true, dependabot: true } });
+  const allowed = stubFetch({ pull: dependabotPull(), commits: [dependabotCommit()] });
+  await main();
+  assert.deepEqual(
+    allowed.statuses.map(({ state }) => state),
+    ['pending', 'success'],
+  );
+  assert.match(allowed.statuses.at(-1).description, /Dependabot's own attested change/);
+
+  const foreign = stubFetch({
+    pull: dependabotPull(),
+    commits: [dependabotCommit({ author: { ...REAL_DEPENDABOT_COMMIT.author, id: 42 } })],
+  });
+  await main();
+  assert.deepEqual(
+    foreign.statuses.map(({ state }) => state),
+    ['pending', 'failure'],
+  );
+  assert.equal(foreign.statuses.at(-1).description, 'ci-only: no readable Lane declaration');
+
+  const unreadable = stubFetch({ pull: dependabotPull(), commitStatus: 502 });
+  await main();
+  assert.deepEqual(
+    unreadable.statuses.map(({ state }) => state),
+    ['pending'],
+  );
+});
+
+test('a ci-only repository without the Dependabot setting fails an undeclared Dependabot change', async (t) => {
+  runtimeEnv(t, pullEvent(), { settings: { ciOnly: true } });
+  const { statuses, calls } = stubFetch({ pull: dependabotPull(), commits: [dependabotCommit()] });
+  await main();
+  assert.deepEqual(
+    statuses.map(({ state }) => state),
+    ['pending', 'failure'],
+  );
+  assert.equal(statuses.at(-1).description, 'ci-only: no readable Lane declaration');
+  assert.equal(
+    calls.some(([path]) => path.includes('/commits')),
+    false,
+  );
+});
+
 test('without the setting, a Dependabot change needs the reviewer like any other', async (t) => {
   runtimeEnv(t, pullEvent());
   const { statuses, calls } = stubFetch({ pull: dependabotPull(), commits: [dependabotCommit()] });
