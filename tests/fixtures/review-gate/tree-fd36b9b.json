@@ -1,0 +1,282 @@
+{
+  "source": "gh api repos/todd-studio/ci-tools/git/trees/fd36b9b?recursive=1 \u2014 captured 2026-11-02 on toddagent01@mac-main",
+  "reply": {
+    "sha": "fd36b9b152668c47a3e4161ba92067699f5e4ff6",
+    "url": "https://api.github.com/repos/todd-studio/ci-tools/git/trees/fd36b9b152668c47a3e4161ba92067699f5e4ff6",
+    "tree": [
+      {
+        "path": ".coderabbit.yaml",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "8b158c3c3468097cfc81fed2d7ca4f59d4d16b0e",
+        "size": 437,
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/blobs/8b158c3c3468097cfc81fed2d7ca4f59d4d16b0e"
+      },
+      {
+        "path": ".github",
+        "mode": "040000",
+        "type": "tree",
+        "sha": "722c0adb7227207dcc4495dcee595fea733c043f",
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/trees/722c0adb7227207dcc4495dcee595fea733c043f"
+      },
+      {
+        "path": ".github/dependabot.yml",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "0963321cca4bc3de2d35836a864fdea35124c7da",
+        "size": 245,
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/blobs/0963321cca4bc3de2d35836a864fdea35124c7da"
+      },
+      {
+        "path": ".github/review-gate.json",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "b0899e5034a3062127c6c0ea0c34fb30fdfcf1a3",
+        "size": 198,
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/blobs/b0899e5034a3062127c6c0ea0c34fb30fdfcf1a3"
+      },
+      {
+        "path": ".github/workflows",
+        "mode": "040000",
+        "type": "tree",
+        "sha": "283c6406d281fc2f93070713f9ec80650e3a2f99",
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/trees/283c6406d281fc2f93070713f9ec80650e3a2f99"
+      },
+      {
+        "path": ".github/workflows/ci.yml",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "6257ff822d8881a3ebaa5f1eaffdc0be514cd965",
+        "size": 1685,
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/blobs/6257ff822d8881a3ebaa5f1eaffdc0be514cd965"
+      },
+      {
+        "path": ".github/workflows/review-gate.yml",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "13b1b68b1d85f587d28c3f40c252e51f2357255e",
+        "size": 3221,
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/blobs/13b1b68b1d85f587d28c3f40c252e51f2357255e"
+      },
+      {
+        "path": ".github/workflows/review-verdict-wake.yml",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "821b959cfe466359ed32681fd156b44204a8bbb0",
+        "size": 1081,
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/blobs/821b959cfe466359ed32681fd156b44204a8bbb0"
+      },
+      {
+        "path": ".gitignore",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "c2658d7d1b31848c3b71960543cb0368e56cd4c7",
+        "size": 14,
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/blobs/c2658d7d1b31848c3b71960543cb0368e56cd4c7"
+      },
+      {
+        "path": "AGENTS.md",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "152add2b49eb380ca4ba2ebc0a6cf4202a030273",
+        "size": 670,
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/blobs/152add2b49eb380ca4ba2ebc0a6cf4202a030273"
+      },
+      {
+        "path": "CLAUDE.md",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "43c994c2d3617f947bcb5adf1933e21dabe46bb5",
+        "size": 11,
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/blobs/43c994c2d3617f947bcb5adf1933e21dabe46bb5"
+      },
+      {
+        "path": "README.md",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "ed0ec9d19f39835cb26c6deeba888c154a121f21",
+        "size": 6919,
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/blobs/ed0ec9d19f39835cb26c6deeba888c154a121f21"
+      },
+      {
+        "path": "ci-fetch.sh",
+        "mode": "100755",
+        "type": "blob",
+        "sha": "c7f4392308a00bb591f607d6d919dd1365f81cfc",
+        "size": 2923,
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/blobs/c7f4392308a00bb591f607d6d919dd1365f81cfc"
+      },
+      {
+        "path": "docs-parts",
+        "mode": "040000",
+        "type": "tree",
+        "sha": "5f4dca994336904c44080d70d890cf29c2487c77",
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/trees/5f4dca994336904c44080d70d890cf29c2487c77"
+      },
+      {
+        "path": "docs-parts/code-links.mjs",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "4a33d8e12ef6a7c0094682e82ba45722dfaf0381",
+        "size": 13998,
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/blobs/4a33d8e12ef6a7c0094682e82ba45722dfaf0381"
+      },
+      {
+        "path": "docs-parts/docs-parts.mjs",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "0a244b2454d2a65cb0aff4ebca7caaa67f4768eb",
+        "size": 23080,
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/blobs/0a244b2454d2a65cb0aff4ebca7caaa67f4768eb"
+      },
+      {
+        "path": "docs-parts/package-lock.json",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "e9fc55b0c362427d51abab15f86448d3f0a5cc89",
+        "size": 1111,
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/blobs/e9fc55b0c362427d51abab15f86448d3f0a5cc89"
+      },
+      {
+        "path": "docs-parts/package.json",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "e62e0599c1c6905761ca309f8b277afb28c4b337",
+        "size": 301,
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/blobs/e62e0599c1c6905761ca309f8b277afb28c4b337"
+      },
+      {
+        "path": "review-gate",
+        "mode": "040000",
+        "type": "tree",
+        "sha": "e7cd1051d6e0b809105853fe03a2dd168e196c9a",
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/trees/e7cd1051d6e0b809105853fe03a2dd168e196c9a"
+      },
+      {
+        "path": "review-gate/review-gate.mjs",
+        "mode": "100755",
+        "type": "blob",
+        "sha": "e53a358d9ef79932b25f8d7de183bbe4f56dcea6",
+        "size": 22232,
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/blobs/e53a358d9ef79932b25f8d7de183bbe4f56dcea6"
+      },
+      {
+        "path": "review-gate/review-verdict.mjs",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "b352cfa2de87c6afd7f07d901d9db7930440dd2b",
+        "size": 26252,
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/blobs/b352cfa2de87c6afd7f07d901d9db7930440dd2b"
+      },
+      {
+        "path": "tests",
+        "mode": "040000",
+        "type": "tree",
+        "sha": "23ba846574d1accda4877c1a6561866bf837b57d",
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/trees/23ba846574d1accda4877c1a6561866bf837b57d"
+      },
+      {
+        "path": "tests/ci-fetch.test.sh",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "fd54b621d05fa62169d45608b991e1ebb64a04e5",
+        "size": 3470,
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/blobs/fd54b621d05fa62169d45608b991e1ebb64a04e5"
+      },
+      {
+        "path": "tests/code-links.test.mjs",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "fb19ce56bb03f5f4cbdeb416f6435826c97bb708",
+        "size": 7369,
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/blobs/fb19ce56bb03f5f4cbdeb416f6435826c97bb708"
+      },
+      {
+        "path": "tests/docs-parts.test.mjs",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "5b068430ab0c30c61f7bffc186e4e69ca83d4d7f",
+        "size": 17994,
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/blobs/5b068430ab0c30c61f7bffc186e4e69ca83d4d7f"
+      },
+      {
+        "path": "tests/fixtures",
+        "mode": "040000",
+        "type": "tree",
+        "sha": "1fd4e1b66e68b5967ad3c24bb142e02f2aaa62f7",
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/trees/1fd4e1b66e68b5967ad3c24bb142e02f2aaa62f7"
+      },
+      {
+        "path": "tests/fixtures/review-gate",
+        "mode": "040000",
+        "type": "tree",
+        "sha": "f3ec1945b5044ff1de94eb38a73f1bd7888fca2e",
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/trees/f3ec1945b5044ff1de94eb38a73f1bd7888fca2e"
+      },
+      {
+        "path": "tests/fixtures/review-gate/dependabot-pull-actions-checkout-2590-commits.json",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "a0b8712153cb29e45904d168b7b5e3d79bc4441a",
+        "size": 6267,
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/blobs/a0b8712153cb29e45904d168b7b5e3d79bc4441a"
+      },
+      {
+        "path": "tests/fixtures/review-gate/dependabot-pull-actions-checkout-2590-files.json",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "7f9ae1b04b45f2c7033b135720cccf15142e2379",
+        "size": 1424,
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/blobs/7f9ae1b04b45f2c7033b135720cccf15142e2379"
+      },
+      {
+        "path": "tests/fixtures/review-gate/dependabot-pull-actions-checkout-2590-pull.json",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "ebe3debc22c51810fed944990e66ae6d72ae7133",
+        "size": 30016,
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/blobs/ebe3debc22c51810fed944990e66ae6d72ae7133"
+      },
+      {
+        "path": "tests/fixtures/review-gate/pulls-1-reviews-approved.json",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "218f40c8130b786efad8bc0f5066f2c68d06dc26",
+        "size": 2217,
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/blobs/218f40c8130b786efad8bc0f5066f2c68d06dc26"
+      },
+      {
+        "path": "tests/helpers",
+        "mode": "040000",
+        "type": "tree",
+        "sha": "f533ca892e5979b6ab06b2ef0cae34228158fe41",
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/trees/f533ca892e5979b6ab06b2ef0cae34228158fe41"
+      },
+      {
+        "path": "tests/helpers/fixtures.mjs",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "2a4140a028454c9902ae5908a53c75d189020328",
+        "size": 531,
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/blobs/2a4140a028454c9902ae5908a53c75d189020328"
+      },
+      {
+        "path": "tests/review-gate.test.mjs",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "879c2a76439a78fad2b329c76c361abefa24d4d9",
+        "size": 35411,
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/blobs/879c2a76439a78fad2b329c76c361abefa24d4d9"
+      },
+      {
+        "path": "tests/review-verdict.test.mjs",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "02d58a3b91f5cff9145bd49c2ede0463cba77452",
+        "size": 15408,
+        "url": "https://api.github.com/repos/todd-studio/ci-tools/git/blobs/02d58a3b91f5cff9145bd49c2ede0463cba77452"
+      }
+    ],
+    "truncated": false
+  }
+}

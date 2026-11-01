@@ -17,6 +17,9 @@ export const STUCK_MS = 30 * 60 * 1000;
 export const EARLY_DEATH_MS = 60 * 1000;
 export const LIVENESS_PATTERN = (repository, number) => `services/review-launch.mjs ${repository}#${number} `;
 
+const REVIEW_STATES = new Set(['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED', 'COMMENTED', 'PENDING']);
+const readableReviewerState = (login, state) => login !== REVIEWER_LOGIN || REVIEW_STATES.has(state);
+
 const FULL_SHA = /^[0-9a-f]{40}$/;
 const RFC3339 = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|([+-])(\d{2}):(\d{2}))$/;
 
@@ -26,7 +29,7 @@ export function parseLane(body) {
   if (lines.length !== 1) return 'undeclared';
   const [line] = lines;
   const value = line.replace(/^[\s-]*Lane\s*:\s*/i, '').trim();
-  const token = (value.match(/^([A-Za-z][A-Za-z-]*)/) ?? [])[1]?.toLowerCase();
+  const token = (value.match(/^(ordinary|guarded)(?=$|[\s,(])/i) ?? [])[1]?.toLowerCase();
   if (token === 'ordinary') return 'ordinary';
   if (token === 'guarded') return 'guarded';
   return 'undeclared';
@@ -57,7 +60,14 @@ function normalizedReview(review, fallbackId = null) {
   const head = review?.commit_id ?? review?.commit?.oid;
   const submittedAt = review?.submitted_at ?? review?.submittedAt;
   const id = review?.id ?? fallbackId;
-  if (!Number.isSafeInteger(id) || id < 1 || typeof review?.state !== 'string' || typeof login !== 'string' || !login)
+  if (
+    !Number.isSafeInteger(id) ||
+    id < 1 ||
+    typeof review?.state !== 'string' ||
+    typeof login !== 'string' ||
+    !login ||
+    !readableReviewerState(login, review.state)
+  )
     throw new Error('the reviewer verdict inventory is unreadable');
   if (!(head === null || typeof head === 'string')) throw new Error('the reviewer verdict inventory is unreadable');
   return { id, state: review.state, login, head, submittedAt };
@@ -78,7 +88,8 @@ export function readableReviews(reviews) {
       typeof review.state !== 'string' ||
       !(review.commit_id === null || typeof review.commit_id === 'string') ||
       typeof review.user?.login !== 'string' ||
-      !review.user.login
+      !review.user.login ||
+      !readableReviewerState(review.user.login, review.state)
     )
       throw new Error('the exact-head reviewer verdict inventory is unreadable');
   }

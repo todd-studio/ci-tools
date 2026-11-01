@@ -391,3 +391,24 @@ test('a missing lane declaration remains guarded and wakes an idle author', () =
   assert.equal(result.wait.outcome, 'reviewer-dead');
   assert.equal(result.backstop.action, 'wake');
 });
+
+test('unknown trusted-reviewer states refuse both REST and GraphQL decision inventories', () => {
+  const [approval] = readFixture('review-gate/pulls-1-reviews-approved.json');
+  const unknown = { ...approval, id: approval.id + 1, state: 'UNKNOWN' };
+  assert.throws(() => reviewerDecisions([approval, unknown], { strict: true }), /inventory/);
+  const graphql = (review) => ({
+    author: review.user,
+    state: review.state,
+    commit: { oid: review.commit_id },
+    submittedAt: review.submitted_at,
+  });
+  assert.throws(() => reviewerDecisions([approval, unknown].map(graphql)), /inventory/);
+});
+
+test('known non-decisive trusted reviews preserve an approval', () => {
+  const [approval] = readFixture('review-gate/pulls-1-reviews-approved.json');
+  for (const state of ['COMMENTED', 'PENDING']) {
+    const reviews = [approval, { ...approval, id: approval.id + 1, state }];
+    assert.deepEqual(reviewerDecisions(reviews, { strict: true }).map((review) => review.state), ['APPROVED']);
+  }
+});
