@@ -65,14 +65,14 @@ export function readSettings(read) {
   for (const key of Object.keys(settings))
     if (!SETTING_KEYS.has(key)) throw new Error(`${SETTINGS_PATH} names an unknown setting: ${key}`);
   const paths = (key) => {
-    const value = settings[key] ?? [];
+    const value = settings[key] === undefined ? [] : settings[key];
     if (!Array.isArray(value) || !value.every(repositoryPath))
       throw new Error(`${SETTINGS_PATH}: ${key} must be a list of repository-relative paths`);
     return value;
   };
-  const dependabot = settings.dependabot ?? false;
+  const dependabot = settings.dependabot === undefined ? false : settings.dependabot;
   if (typeof dependabot !== 'boolean') throw new Error(`${SETTINGS_PATH}: dependabot must be true or false`);
-  const ciOnly = settings.ciOnly ?? false;
+  const ciOnly = settings.ciOnly === undefined ? false : settings.ciOnly;
   if (typeof ciOnly !== 'boolean') throw new Error(`${SETTINGS_PATH}: ciOnly must be true or false`);
   return { guardedFiles: paths('guardedFiles'), guardedEntryPoints: paths('guardedEntryPoints'), dependabot, ciOnly };
 }
@@ -101,7 +101,11 @@ export function importClosure(entries, read) {
       throw error;
     }
     seen.add(file);
-    for (const [, specifier] of text.matchAll(/\b(?:from|import|require)\s*\(?\s*["'](\.{1,2}\/[^"']+)["']/g)) {
+    // JavaScript comments are whitespace between these tokens. Keep them in
+    // the match rather than deleting them from strings or file paths.
+    const trivia = String.raw`(?:\s|/\*[\s\S]*?\*/|//[^\r\n]*(?:\r?\n|$))*`;
+    const imports = new RegExp(String.raw`\b(?:from|import|require)${trivia}\(?${trivia}["'](\.{1,2}/[^"']+)["']`, 'g');
+    for (const [, specifier] of text.matchAll(imports)) {
       pending.push({
         file: path.posix.normalize(path.posix.join(path.posix.dirname(file), specifier)),
         isEntry: false,
@@ -122,6 +126,15 @@ export const FILE_LIST_CAP = 3000;
 export function guardedTouch(files, surface) {
   if (!Array.isArray(files)) throw new Error('the pull-request file list is unreadable');
   if (files.length >= FILE_LIST_CAP) throw new Error(`the pull-request file list reached GitHub's ${FILE_LIST_CAP}-file cap`);
+  for (const file of files) {
+    if (
+      typeof file?.filename !== 'string' ||
+      file.filename.length === 0 ||
+      (file.previous_filename !== undefined &&
+        (typeof file.previous_filename !== 'string' || file.previous_filename.length === 0))
+    )
+      throw new Error('the pull-request file list is unreadable');
+  }
   for (const file of files) {
     for (const name of [file?.filename, file?.previous_filename].filter(Boolean)) {
       if (surface.has(name)) return name;
@@ -162,6 +175,7 @@ export function dependabotAttested(pullRequest, commits) {
 // returning a short answer, and every caller turns that into a red gate.
 export function treeIndex(tree) {
   if (!tree || typeof tree !== 'object') throw new Error('a tree listing is not an object');
+  if (typeof tree.truncated !== 'boolean') throw new Error('a tree listing has no readable truncation flag');
   if (tree.truncated === true) throw new Error('a tree listing was truncated by GitHub');
   if (!Array.isArray(tree.tree)) throw new Error('a tree listing carries no entries');
   const index = new Map();

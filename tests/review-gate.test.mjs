@@ -138,8 +138,8 @@ test('a dismissal naming this exact head is withdrawn, whatever an older head ap
 
 test('a truncated or malformed tree listing is no tree at all', () => {
   assert.throws(() => treeIndex({ truncated: true, tree: [] }), /truncated/);
-  assert.throws(() => treeIndex({ tree: 'not a list' }), /no entries/);
-  assert.throws(() => treeIndex({ tree: [{ path: 'a', mode: '100644', type: 'blob' }] }), /not readable/);
+  assert.throws(() => treeIndex({ truncated: false, tree: 'not a list' }), /no entries/);
+  assert.throws(() => treeIndex({ truncated: false, tree: [{ path: 'a', mode: '100644', type: 'blob' }] }), /not readable/);
   assert.throws(() => treeIndex(null), /not an object/);
 });
 
@@ -162,8 +162,8 @@ test('a tree index carries blobs with their mode and drops directory entries', (
 });
 
 test('a mode change alone is a difference between two otherwise-equal trees', () => {
-  const a = treeIndex({ tree: [{ path: 'x.sh', mode: '100644', type: 'blob', sha: 'x1' }] });
-  const b = treeIndex({ tree: [{ path: 'x.sh', mode: '100755', type: 'blob', sha: 'x1' }] });
+  const a = treeIndex({ truncated: false, tree: [{ path: 'x.sh', mode: '100644', type: 'blob', sha: 'x1' }] });
+  const b = treeIndex({ truncated: false, tree: [{ path: 'x.sh', mode: '100755', type: 'blob', sha: 'x1' }] });
   assert.equal(treeIndexesEqual(a, b), false);
 });
 
@@ -926,4 +926,115 @@ test('without the setting, a Dependabot change needs the reviewer like any other
     calls.some(([path]) => path.includes('/commits')),
     false,
   );
+});
+
+// #30: mutate captured GitHub replies at the real status-publication seam.
+test('non-exact lane tokens cannot permit a ci-only merge', async (t) => {
+  for (const lane of ['guarded123', 'guarded/ordinary', 'ordinary-x', 'ordinary123', 'ordinary/guarded']) {
+    await t.test(lane, async (st) => {
+      runtimeEnv(st, pullEvent(), { settings: { ciOnly: true } });
+      const { statuses } = stubFetch({ lane });
+      await main();
+      assert.equal(parseLane(`Lane: ${lane}`), 'undeclared');
+      assert.deepEqual(statuses.map(({ state }) => state), ['pending', 'failure']);
+    });
+  }
+});
+
+test('explicit null settings cannot erase a configured policy', async (t) => {
+  for (const key of ['guardedFiles', 'guardedEntryPoints', 'ciOnly', 'dependabot']) {
+    await t.test(key, async (st) => {
+      runtimeEnv(st, pullEvent(), { settings: { [key]: null } });
+      const { statuses } = stubFetch({ lane: 'ordinary' });
+      await main();
+      assert.deepEqual(statuses.map(({ state }) => state), ['pending']);
+    });
+  }
+});
+
+test('comments between an import keyword and its literal cannot hide guarded dependencies', async (t) => {
+  for (const source of [
+    'require /* c */ ("./b.cjs")',
+    'require( /* c */ "./b.cjs")',
+    'import /* c */ ("./b.cjs")',
+    'export * from /* c */ "./b.cjs"',
+    'require // c\n ("./b.cjs")',
+  ]) {
+    await t.test(source, async (st) => {
+      runtimeEnv(st, pullEvent(), {
+        settings: { guardedEntryPoints: ['scripts/a.cjs'] },
+        files: { 'scripts/a.cjs': source, 'scripts/b.cjs': '' },
+      });
+      const { statuses } = stubFetch({ lane: 'ordinary', files: [fileNamed('scripts/b.cjs')] });
+      await main();
+      assert.equal(statuses.some(({ state }) => state === 'success'), false);
+      assert.equal(statuses.at(-1).state, 'failure');
+      assert.match(statuses.at(-1).description, /^scripts\/b.cjs is guarded surface/);
+    });
+  }
+});
+
+test('unreadable filenames cannot prove an ordinary change avoids the guarded surface', async (t) => {
+  const missing = { ...REAL_FILES[0] };
+  delete missing.filename;
+  for (const entry of [missing, fileNamed(null), fileNamed(42), fileNamed(''), null]) {
+    await t.test(JSON.stringify(entry), async (st) => {
+      runtimeEnv(st, pullEvent());
+      const { statuses } = stubFetch({ lane: 'ordinary', files: [entry] });
+      await main();
+      assert.deepEqual(statuses.map(({ state }) => state), ['pending']);
+    });
+  }
+});
+
+test('unknown trusted-reviewer states cannot preserve an earlier approval', async (t) => {
+  for (const state of ['UNKNOWN', 'approved', '']) {
+    await t.test(JSON.stringify(state), async (st) => {
+      runtimeEnv(st, pullEvent(REAL_HEAD));
+      const approval = REAL_APPROVAL[0];
+      const { statuses } = stubFetch({
+        heads: [REAL_HEAD, REAL_HEAD],
+        reviews: [approval, { ...approval, id: approval.id + 1, state }],
+      });
+      await main();
+      assert.deepEqual(statuses.map(({ state }) => state), ['pending']);
+    });
+  }
+});
+
+test('non-boolean tree completeness cannot carry an earlier approval', async (t) => {
+  const captured = readFixture('review-gate/tree-fd36b9b.json');
+  const missing = { ...captured };
+  delete missing.truncated;
+  for (const tree of [missing, ...[null, 'false', 0].map((truncated) => ({ ...captured, truncated }))]) {
+    await t.test(String(tree.truncated), async (st) => {
+      runtimeEnv(st, pullEvent());
+      const trees = Object.fromEntries(Object.keys(CARRY_TREES).map((sha) => [sha, tree]));
+      const { statuses } = carryStub({ trees });
+      await main();
+      assert.deepEqual(statuses.map(({ state }) => state), ['pending', 'failure']);
+    });
+  }
+  await t.test('complete captured tree', async (st) => {
+    runtimeEnv(st, pullEvent());
+    const trees = Object.fromEntries(Object.keys(CARRY_TREES).map((sha) => [sha, captured]));
+    const { statuses } = carryStub({ trees });
+    await main();
+    assert.deepEqual(statuses.map(({ state }) => state), ['pending', 'success']);
+  });
+});
+
+test('known non-decisive reviews still let an exact-head approval pass the gate', async (t) => {
+  for (const state of ['COMMENTED', 'PENDING']) {
+    await t.test(state, async (st) => {
+      runtimeEnv(st, pullEvent(REAL_HEAD));
+      const approval = REAL_APPROVAL[0];
+      const { statuses } = stubFetch({
+        heads: [REAL_HEAD, REAL_HEAD],
+        reviews: [approval, { ...approval, id: approval.id + 1, state }],
+      });
+      await main();
+      assert.deepEqual(statuses.map(({ state }) => state), ['pending', 'success']);
+    });
+  }
 });

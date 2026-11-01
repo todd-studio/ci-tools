@@ -76,6 +76,10 @@ declares `Lane: ordinary` is green without a reviewer; a guarded or undeclared o
 `toddreviewer01`'s standing native approval of the exact current head, or of a head this one only
 merges the base branch into. `review-verdict.mjs` is the one guarded-review verdict the gate
 projects; todd-studio/workstation's `ws review wait`, backstop and router use the same file.
+The lane token must be exactly `ordinary` or `guarded` (case-insensitive), followed by the end
+of the line, whitespace, a comma or an opening parenthesis for an explanation. Joined suffixes
+such as `guarded123`, `guarded/ordinary` and `ordinary-x` are undeclared. Unknown native-review
+states from the trusted reviewer are unreadable; `COMMENTED` and `PENDING` remain non-verdicts.
 
 A consumer runs it from a `pull_request_target` workflow that checks out its own default branch
 (never the pull request) and fetches both files at a pinned commit, each SHA-256 checked:
@@ -92,7 +96,8 @@ nothing, and an absent required context blocks.
 
 What differs between repositories is a setting, never a fork: `.github/review-gate.json` in the
 consumer's default branch. Absent means none. Present but unreadable, malformed or naming an
-unknown key, the gate publishes nothing past `pending`.
+unknown key, the gate publishes nothing past `pending`. Defaults apply only to omitted settings;
+explicit `null` is malformed.
 
 ```json
 {
@@ -110,7 +115,8 @@ unknown key, the gate publishes nothing past `pending`.
 
 - `guardedFiles`, `guardedEntryPoints`: a change declared ordinary that touches one of these files,
   or a module an entry point reaches through relative import specifiers spelled as exact file
-  paths, is judged as guarded (an extensionless or directory specifier is not followed). The
+  paths, is judged as guarded (an extensionless or directory specifier is not followed). Whitespace
+  and JavaScript comments may separate the import/require tokens and the quoted path. The
   settings file itself is always on that surface; list the gate's own workflow and pin to keep an
   ordinary change from moving the gate.
 - `dependabot`: Dependabot's own change (its app identity, a same-repository head, every commit
