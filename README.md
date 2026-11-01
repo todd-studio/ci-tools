@@ -123,6 +123,11 @@ unknown key, the gate publishes nothing past `pending`.
   never declares a lane, so its attestation is checked first. It defaults to `false`, preserving the
   shared gate's normal review policy.
 
+ci-tools gates itself with the same file. Its `.github/workflows/review-gate.yml` runs
+`review-gate/review-gate.mjs` from its own default-branch checkout rather than a pinned fetch, so
+a pull request never supplies the code that judges it; a change to the gate takes effect here only
+once it merges. `main` requires `review/gate` beside every CI job.
+
 Public, no secrets. Originated in todd-studio/workstation's `scripts/review-gate.mjs` and
 `services/review-verdict.mjs` (WS #3040), with todd-studio/plates-web's surface and Dependabot
 rules as settings.
