@@ -1,0 +1,9 @@
+{
+  "guardedFiles": [
+    "ci-fetch.sh",
+    ".github/workflows/ci.yml",
+    ".github/workflows/review-gate.yml"
+  ],
+  "guardedEntryPoints": ["review-gate/review-gate.mjs"],
+  "dependabot": true
+}
