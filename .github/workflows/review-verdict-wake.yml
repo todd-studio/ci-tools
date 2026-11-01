@@ -1,0 +1,22 @@
+# The reviewer-verdict wake. A guarded lane's independent verdict is a native
+# pull-request review by toddreviewer01, and GitHub announces a review only
+# through pull_request_review, which runs the pull request's merge revision, so
+# review-gate.yml deliberately never subscribes to it. This workflow is the
+# untrusted half of GitHub's split: it holds no permission, checks nothing out
+# and runs a no-op, and its completion enters the trusted default-branch
+# review-gate.yml as workflow_run carrying the reviewed head. Nothing else it
+# produces is read. A pull request that rewrites this file can only add a gate
+# evaluation or withhold one, and a withheld one leaves a guarded head red: the
+# gate re-reads every review from the API.
+name: Review verdict wake
+on:
+  pull_request_review:
+    types: [submitted, dismissed]
+permissions: {}
+jobs:
+  wake:
+    if: github.event.review.user.login == 'toddreviewer01'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 1
+    steps:
+      - run: echo "review-verdict-wake — review/gate re-evaluates this head from the default branch"

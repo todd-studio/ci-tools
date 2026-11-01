@@ -1,0 +1,63 @@
+# ci-tools' own review/gate commit status, under the shared gate's normal
+# policy: a declared ordinary lane is green without a reviewer; guarded and
+# undeclared lanes are green only when toddreviewer01's standing native review
+# approves the exact current head. Required CI is owned independently by the
+# main ruleset (#26).
+#
+# The same shape as every consumer's review-gate.yml, with one difference:
+# ci-tools is the gate's home, so it runs review-gate/ from its own
+# default-branch checkout instead of fetching itself at a pin. That is still
+# trusted code. pull_request_target runs this WORKFLOW from the default branch
+# whatever the pull request's base, and the checkout below takes the same
+# default branch, so the pull request under review never supplies the code that
+# judges it. A plain pull_request event would run the pull request's own copy of
+# this file while holding statuses: write. No pull-request code is checked out
+# or executed here. The cost is that a change to the gate is exercised on
+# ci-tools only after it merges: gate integrity over self-test. The settings the
+# gate reads (.github/review-gate.json) come from the same checkout.
+#
+# Re-evaluates on head movement, Lane edits, ready/draft transitions and the
+# trusted reviewer's review submissions and dismissals. pull_request_review is
+# deliberately not subscribed here because GitHub runs it from the pull
+# request's merge revision; review-verdict-wake.yml takes that event with no
+# permission and no checkout, and its completion enters this workflow as
+# workflow_run carrying only the reviewed head. Accepted cost class:
+# GITHUB_TOKEN-caused mutations do not re-trigger, and two open pull requests
+# sharing one head SHA share one status. A classic commit status is posted so
+# the ruleset can require the context whatever event produced it; an absent or
+# pending status blocks, so the required context fails closed.
+#
+# Evaluations queue on the head they judge, and the evaluator posts only on that
+# head, so the queue serializes exactly the writers of one status. Corrective
+# publications are never cancelled in favour of a newer snapshot.
+name: Review gate
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, edited, ready_for_review, converted_to_draft]
+  workflow_run:
+    workflows: [Review verdict wake]
+    types: [completed]
+permissions:
+  contents: read
+  statuses: write
+  pull-requests: read
+jobs:
+  gate:
+    if: >-
+      github.event_name == 'pull_request_target' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request_review' &&
+      github.event.workflow_run.conclusion == 'success')
+    concurrency:
+      group: review-gate-${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha || github.repository_id }}
+      cancel-in-progress: false
+      queue: max
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - run: node review-gate/review-gate.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
