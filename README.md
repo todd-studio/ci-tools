@@ -87,6 +87,9 @@ declares `Lane: ordinary` is green without a reviewer; a guarded or undeclared o
 `toddreviewer01`'s standing native approval of the exact current head, or of a head this one only
 merges the base branch into. `review-verdict.mjs` is the one guarded-review verdict the gate
 projects; todd-studio/workstation's `ws review wait`, backstop and router use the same file.
+The backstop also checks approval provenance: a successful reviewer launch must name the
+approved head, or a `ws-review-request` record for that head must follow a successful launch.
+Both records must precede the approval; an earlier-head launch alone cannot vouch for it.
 The lane token must be exactly `ordinary` or `guarded` (case-insensitive), followed by the end
 of the line, whitespace, a comma or an opening parenthesis for an explanation. Joined suffixes
 such as `guarded123`, `guarded/ordinary` and `ordinary-x` are undeclared. Unknown native-review
