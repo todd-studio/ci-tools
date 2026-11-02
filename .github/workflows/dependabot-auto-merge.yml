@@ -1,0 +1,49 @@
+# Run trusted default-branch code only; never install or execute the PR's tree.
+# GitHub's required checks (including review/gate) remain the merge authority.
+name: Dependabot auto-merge
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, edited, ready_for_review, converted_to_draft]
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  arm:
+    if: github.event.pull_request.user.id == 49699333 && github.event.pull_request.user.type == 'Bot'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    concurrency:
+      group: dependabot-auto-merge-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      # Withdraw any earlier request before verification, including when metadata
+      # fails. A synchronize event must earn eligibility again for its new head.
+      - name: Clear prior auto-merge
+        run: node dependabot-auto-merge/dependabot-auto-merge.mjs --clear
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - id: metadata
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      # An auto-merge is made by whoever armed it, and GitHub starts no workflow
+      # for a merge GITHUB_TOKEN armed (plates-web#1685). Arm as the repository's
+      # merge app so main's push CI runs. A missing app secret fails red; it never falls
+      # back to GITHUB_TOKEN.
+      - id: merge-app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.DEPENDABOT_MERGE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.DEPENDABOT_MERGE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-workflows: write
+      - name: Arm eligible exact head
+        run: node dependabot-auto-merge/dependabot-auto-merge.mjs
+        env:
+          GH_TOKEN: ${{ steps.merge-app.outputs.token }}
+          UPDATED_DEPENDENCIES: ${{ steps.metadata.outputs.updated-dependencies-json }}

@@ -159,3 +159,128 @@ lets Dependabot's own attested change through without a reviewer.
 Public, no secrets. Originated in todd-studio/workstation's `scripts/review-gate.mjs` and
 `services/review-verdict.mjs` (WS #3040), with todd-studio/plates-web's surface and Dependabot
 rules as settings.
+
+## dependabot-auto-merge/
+
+Requests squash auto-merge for Dependabot's minor and patch updates in the ecosystems a consumer
+allows. Required CI and `review/gate` remain the merge authority. The workflow first clears any
+prior auto-merge request, then verifies fresh metadata and asks to arm the exact event head with
+`gh pr merge --auto --squash --match-head-commit`. Only an open, non-draft PR by Dependabot's Bot
+user id `49699333`, with exactly one commit, a same-repository head and the default branch as base,
+qualifies. Every dependency in a group must qualify; major updates and unknown update types wait
+for review. `dependabot/fetch-metadata` verifies only the first commit, hence the one-commit limit.
+
+The consumer's default-branch checkout must contain `.github/dependabot-auto-merge.json`:
+
+```json
+{
+  "ecosystems": ["npm_and_yarn", "github_actions", "uv"]
+}
+```
+
+Choose only the ecosystems that repository allows. Values are fetch-metadata's `packageEcosystem`
+ids (lowercase letters, digits and underscores), such as `npm_and_yarn`, `github_actions` and `uv`,
+not Dependabot configuration names such as `npm` or `github-actions`. A value only matches that
+exact metadata id; an unmatched id authorizes nothing. There is no default policy: a missing,
+unreadable or malformed file, unknown key, or empty list throws and the job fails red without
+arming. `--clear` does not read settings or dependency metadata, so a broken policy cannot stop
+withdrawal of a prior request.
+
+Consumers keep `scripts/dependabot-auto-merge.pin` in the same format as `review-gate.pin`:
+
+```text
+commit <40-hex ci-tools commit>
+<sha256>  ci-fetch.sh
+<sha256>  dependabot-auto-merge/dependabot-auto-merge.mjs
+```
+
+Take both hashes from a checkout of that exact published commit, never from a workflow's download:
+
+```sh
+shasum -a 256 ci-fetch.sh dependabot-auto-merge/dependabot-auto-merge.mjs
+```
+
+Move the commit and hashes together. The existing consumer `scripts/ci-fetch-bootstrap.sh` verifies the fetcher
+before it runs, then `ci-fetch.sh` verifies the standalone script; no local imports or install are
+needed. Put the workflow, pin, settings and bootstrap on `.github/review-gate.json`'s `guardedFiles`
+surface, so an ordinary change cannot move the credential's trusted code or policy.
+
+Use this exact `.github/workflows/dependabot-auto-merge.yml` text in every consumer; repository
+policy belongs only in the settings and the pin:
+
+```yaml
+# Run trusted default-branch code only; never install or execute the PR's tree.
+# GitHub's required checks (including review/gate) remain the merge authority.
+name: Dependabot auto-merge
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, edited, ready_for_review, converted_to_draft]
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  arm:
+    if: github.event.pull_request.user.id == 49699333 && github.event.pull_request.user.type == 'Bot'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    concurrency:
+      group: dependabot-auto-merge-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Fetch pinned Dependabot arming script
+        run: |
+          pin=scripts/dependabot-auto-merge.pin
+          commit="$(awk '$1 == "commit" { print $2 }' "$pin")"
+          want() { awk -v f="$1" '$2 == f { print $1 }' "$pin"; }
+          base="https://raw.githubusercontent.com/todd-studio/ci-tools"
+          script=dependabot-auto-merge/dependabot-auto-merge.mjs
+          mkdir -p "$RUNNER_TEMP/dependabot-auto-merge"
+          scripts/ci-fetch-bootstrap.sh "$commit" "$(want ci-fetch.sh)" "$RUNNER_TEMP/ci-fetch.sh"
+          "$RUNNER_TEMP/ci-fetch.sh" "$base/$commit/$script" "$(want "$script")" "$RUNNER_TEMP/$script"
+      # Withdraw any earlier request before verification, including when metadata
+      # fails. A synchronize event must earn eligibility again for its new head.
+      - name: Clear prior auto-merge
+        run: node "$RUNNER_TEMP/dependabot-auto-merge/dependabot-auto-merge.mjs" --clear
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - id: metadata
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      # An auto-merge is made by whoever armed it, and GitHub starts no workflow
+      # for a merge GITHUB_TOKEN armed (plates-web#1685). Arm as the repository's
+      # merge app so main's push CI runs. A missing app secret fails red; it never falls
+      # back to GITHUB_TOKEN.
+      - id: merge-app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.DEPENDABOT_MERGE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.DEPENDABOT_MERGE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-workflows: write
+      - name: Arm eligible exact head
+        run: node "$RUNNER_TEMP/dependabot-auto-merge/dependabot-auto-merge.mjs"
+        env:
+          GH_TOKEN: ${{ steps.merge-app.outputs.token }}
+          UPDATED_DEPENDENCIES: ${{ steps.metadata.outputs.updated-dependencies-json }}
+```
+
+The merge App must be installed on that repository with Contents, Pull requests and Workflows
+write permissions. Set `DEPENDABOT_MERGE_APP_CLIENT_ID` and `DEPENDABOT_MERGE_APP_PRIVATE_KEY` in
+both its Actions and Dependabot secret stores. The token is scoped to the current repository;
+arming as the App allows the merge's `push` CI to run. Missing secrets or refused permissions fail
+red with no fallback to `GITHUB_TOKEN`; the daily Dependabot backstop can still handle the update.
+See [create-github-app-token's permissions](https://github.com/actions/create-github-app-token#inputs)
+and [fetch-metadata's outputs](https://github.com/dependabot/fetch-metadata#outputs).
+
+ci-tools uses the same clear/metadata/App/arm steps, running the script and settings from its own
+default-branch checkout rather than fetching itself. No pull-request code is checked out or run;
+changes to this workflow take effect only after merging. Its policy allows `github_actions`.
+Tests run in the required `review gate` CI job, replaying captured GitHub and fetch-metadata replies
+from [plates-web#1689](https://github.com/todd-studio/plates-web/pull/1689). Originated in todd-studio/plates-web's arming script and workflow
+(WS #5159).

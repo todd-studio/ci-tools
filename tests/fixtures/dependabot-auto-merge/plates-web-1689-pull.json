@@ -1,0 +1,28 @@
+{
+  "source": "gh api repos/todd-studio/plates-web/pulls/1689 \u2014 captured 2026-11-03 on toddagent01@mac-main; projection of consumed fields (closed after merge, auto-merge still recorded)",
+  "reply": {
+    "number": 1689,
+    "state": "closed",
+    "draft": false,
+    "commits": 1,
+    "auto_merge": {
+      "merge_method": "squash"
+    },
+    "user": {
+      "id": 49699333,
+      "type": "Bot"
+    },
+    "head": {
+      "sha": "553f10c66d657da38822eb674c78ccd68b37bf54",
+      "repo": {
+        "id": 1236083753
+      }
+    },
+    "base": {
+      "ref": "main",
+      "repo": {
+        "id": 1236083753
+      }
+    }
+  }
+}
