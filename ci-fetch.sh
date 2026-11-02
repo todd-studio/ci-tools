@@ -1,18 +1,17 @@
 #!/bin/bash
 # Fetch a pinned release artifact and refuse to produce it unless its SHA-256 matches.
 #
-# CI installs yq, chezmoi and gitleaks by downloading release binaries, because the runner image
-# does not carry the versions the Macs run. On the Macs those same tools come from Homebrew, which
-# verifies what it downloads; in CI nothing did. A pinned version is not a pinned artifact — a
+# CI installs tools such as gitleaks, yq and chezmoi by downloading release binaries, because the
+# runner image does not carry the versions needed. A pinned version is not a pinned artifact — a
 # release asset can be replaced, and a tag can be moved — and the one that matters most is
 # gitleaks, where a substituted binary that cheerfully reports "no leaks found" is exactly the
 # attack the scan exists to prevent.
 #
-# One fetcher rather than a verification step copied beside each download, so a new tool cannot be
-# added without one and the four call sites cannot drift apart. The hashes themselves live in
-# ci.yml's `env:` block, next to the versions they belong to.
+# One canonical fetcher here in ci-tools, fetched by consumers at a pinned commit (with this
+# file's own SHA-256 checked before it runs), rather than a verification step copied beside each
+# download. Consumers keep the artifact hashes next to the pinned commit in their own workflows.
 #
-# Usage: scripts/ci-fetch.sh <url> <sha256> <dest>
+# Usage: ci-fetch.sh <url> <sha256> <dest>
 #   <dest> must be writable without sudo; installing into place is the caller's job, so this
 #   never needs privileges of its own.
 set -uo pipefail
