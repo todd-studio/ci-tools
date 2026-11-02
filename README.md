@@ -10,22 +10,33 @@ a binary (gitleaks, yq, …) and then executes it; a pinned version is not a pin
 substituted scanner reporting nothing wrong passes silently. This is the single fetcher every
 repository calls, rather than a checksum check copied beside each download.
 
-Consume it pinned to a commit, never to a branch:
+Consume it pinned to a commit, never to a branch — and the pin covers ci-fetch.sh itself: fetch
+it with a SHA-256 taken once from a checkout of that exact commit, and refuse to run it unless it
+matches. Inline, that is:
 
 ```yaml
 - name: Fetch the fetcher
+  env:
+    CI_TOOLS: <COMMIT>
+    CI_FETCH_SHA256: <sha256 of ci-fetch.sh at that commit>
   run: |
+    tmp="$(mktemp)"
     curl --fail --location --silent --show-error \
-      "https://raw.githubusercontent.com/todd-studio/ci-tools/<COMMIT>/ci-fetch.sh" \
-      --output "$RUNNER_TEMP/ci-fetch.sh"
-    chmod +x "$RUNNER_TEMP/ci-fetch.sh"
+      "https://raw.githubusercontent.com/todd-studio/ci-tools/$CI_TOOLS/ci-fetch.sh" \
+      --output "$tmp"
+    echo "$CI_FETCH_SHA256  $tmp" | shasum -a 256 -c -
+    chmod +x "$tmp"
+    mv "$tmp" "$RUNNER_TEMP/ci-fetch.sh"
 ```
+
+Most consumers carry this once as a small bootstrap script in their own repo rather than inlining
+it in every workflow.
 
 Then: `ci-fetch.sh <url> <sha256> <dest>`. The SHA-256 comes from the upstream project's own
 published checksums, never from whatever a download happened to produce.
 
 Originated in todd-studio/workstation (`scripts/ci-fetch.sh`); moved here so every repository
-reads the same file. Workstation's migration to this copy is tracked separately.
+reads the same file.
 
 ## docs-parts/
 
