@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import { readFixture } from './helpers/fixtures.mjs';
 
@@ -213,11 +215,11 @@ test('a green review/gate on the current head (a carried approval) is ok whateve
   );
 });
 
-test('an approval with no launch record before it is flagged; a recorded launch or the old seat marker clears it', () => {
+test('an approval needs a successful launch for its head before it', () => {
   const approved = [decision('APPROVED', HEAD, 60)];
   const flagged = backstopDecision({ ...base, decisions: approved });
   assert.equal(flagged.action, 'attention');
-  assert.match(flagged.reason, /no reviewer launch on record before it/);
+  assert.match(flagged.reason, /no reviewer launched or re-requested for that head before it/);
   assert.equal(backstopDecision({ ...base, decisions: approved, launches: [launch(300)] }).action, 'ok');
   assert.equal(backstopDecision({ ...base, decisions: approved, launches: [launch(30)] }).action, 'attention');
   // A launch that failed before readiness seated no reviewer; it cannot vouch
@@ -226,6 +228,59 @@ test('an approval with no launch record before it is flagged; a recorded launch 
     backstopDecision({ ...base, decisions: approved, launches: [launch(300, { failed: true, session: null })] }).action,
     'attention',
   );
+});
+
+test('an approval with only an older-head launch is flagged', () => {
+  const result = backstopDecision({
+    ...base,
+    decisions: [decision('APPROVED', HEAD, 60)],
+    launches: [launch(300, { head: OLD })],
+  });
+  assert.equal(result.action, 'attention');
+  assert.match(result.reason, /no reviewer launched or re-requested for that head before it/);
+});
+
+test('a re-request for the approved head after an older-head launch clears provenance', () => {
+  const result = backstopDecision({
+    ...base,
+    decisions: [decision('APPROVED', HEAD, 60)],
+    launches: [launch(300, { head: OLD })],
+    requests: [{ v: 1, head: HEAD, at: NOW - 120_000 }],
+  });
+  assert.equal(result.action, 'ok');
+  assert.match(result.reason, /reviewer re-requested for that head/);
+});
+
+test('a re-request without a seated launch before it cannot vouch for an approval', () => {
+  for (const launches of [[], [launch(300, { head: OLD, failed: true })], [launch(90, { head: OLD })]]) {
+    const result = backstopDecision({
+      ...base,
+      decisions: [decision('APPROVED', HEAD, 60)],
+      launches,
+      requests: [{ v: 1, head: HEAD, at: NOW - 120_000 }],
+    });
+    assert.equal(result.action, 'attention');
+  }
+});
+
+test('a re-request after the approval cannot vouch for that approval', () => {
+  const result = backstopDecision({
+    ...base,
+    decisions: [decision('APPROVED', HEAD, 60)],
+    launches: [launch(300, { head: OLD })],
+    requests: [{ v: 1, head: HEAD, at: NOW - 30_000 }],
+  });
+  assert.equal(result.action, 'attention');
+});
+
+test('the constants command publishes both provenance markers', () => {
+  const constants = JSON.parse(
+    execFileSync(process.execPath, [fileURLToPath(new URL('../review-gate/review-verdict.mjs', import.meta.url)), 'constants'], {
+      encoding: 'utf8',
+    }),
+  );
+  assert.equal(constants.launchMarker, 'ws-review-launch');
+  assert.equal(constants.requestMarker, 'ws-review-request');
 });
 
 test('drafts, ordinary lanes and closed pull requests are skipped; an unreadable head refuses', () => {
@@ -334,7 +389,7 @@ test('a later old-head decision cannot make a later launch precede the exact-hea
       reviews: [...reviews, restReview(VERDICT_OLD, 'CHANGES_REQUESTED', reviews[0].id + 1, '2026-09-30T07:00:00Z')],
       comments: [
         {
-          body: `<!-- ${LAUNCH_MARKER} ${JSON.stringify({ v: 1, at: '2026-09-30T06:15:00Z' })} -->`,
+          body: `<!-- ${LAUNCH_MARKER} ${JSON.stringify({ v: 1, head, at: '2026-09-30T06:15:00Z' })} -->`,
         },
       ],
     }),

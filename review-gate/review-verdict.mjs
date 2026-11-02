@@ -11,6 +11,7 @@ import { pathToFileURL } from 'node:url';
 
 export const REVIEWER_LOGIN = 'toddreviewer01';
 export const LAUNCH_MARKER = 'ws-review-launch';
+export const REQUEST_MARKER = 'ws-review-request';
 export const MAX_ROUNDS = 5;
 export const MAX_LAUNCHES_PER_ROUND = 3;
 export const STUCK_MS = 30 * 60 * 1000;
@@ -156,11 +157,11 @@ export function reviewerWithdrewOn(reviews, head) {
   );
 }
 
-export function launchRecords(comments) {
+function markedRecords(comments, marker) {
   if (!Array.isArray(comments)) throw new Error('the pull request comments are unreadable');
   const records = [];
   for (const comment of comments) {
-    const found = new RegExp(`<!-- ${LAUNCH_MARKER} (\\{[^\\n]*\\}) -->`).exec(
+    const found = new RegExp(`<!-- ${marker} (\\{[^\\n]*\\}) -->`).exec(
       typeof comment?.body === 'string' ? comment.body : '',
     );
     if (!found) continue;
@@ -175,6 +176,16 @@ export function launchRecords(comments) {
     records.push({ ...record, at });
   }
   return records.sort((left, right) => left.at - right.at);
+}
+
+export function launchRecords(comments) {
+  return markedRecords(comments, LAUNCH_MARKER);
+}
+
+// A live reviewer asked to read a new head is re-requested, not relaunched, so
+// no launch names that head. `ws review start` records the head it re-requested.
+export function requestRecords(comments) {
+  return markedRecords(comments, REQUEST_MARKER);
 }
 
 function requestedReviewer(requests) {
@@ -222,6 +233,7 @@ export function evaluateReviewVerdict(input) {
   const lane = parseLane(pr.body);
   const decisions = reviewerDecisions(input.reviews, { strict: true });
   const launches = launchRecords(input.comments);
+  const requests = requestRecords(input.comments);
   const requested = requestedReviewer(input.reviewRequests);
   const requestedAt = latestRequestedAt(input.timeline);
   const gate = publishedGate(input.statuses);
@@ -421,13 +433,25 @@ export function evaluateReviewVerdict(input) {
   else if (pr.draft) backstop = backstopAnswer('ok', "a draft is still the lane's working surface");
   else if (lane === 'ordinary') backstop = backstopAnswer('ok', 'an ordinary lane needs no reviewer');
   else if (directApproval) {
-    const recorded = launches.some((launch) => launch.at <= review.at && launch.failed !== true);
-    backstop = recorded
-      ? backstopAnswer('ok', 'approved on the current head by a recorded reviewer launch')
-      : backstopAnswer(
-          'attention',
-          `${REVIEWER_LOGIN} approved head ${pr.head} with no reviewer launch on record before it`,
-        );
+    // Provenance is per head: a launch for the approved head, or a re-request
+    // of an already seated reviewer for it. A launch for an earlier head
+    // vouches for nothing a later push brought (WS #5078).
+    const seated = launches.filter((launch) => launch.failed !== true && launch.at <= review.at);
+    const launched = seated.some((launch) => launch.head === review.head);
+    const rerequested = requests.some(
+      (request) =>
+        request.head === review.head && request.at <= review.at && seated.some((launch) => launch.at <= request.at),
+    );
+    backstop =
+      launched || rerequested
+        ? backstopAnswer(
+            'ok',
+            `approved on the current head by a reviewer ${launched ? 'launched' : 're-requested'} for that head`,
+          )
+        : backstopAnswer(
+            'attention',
+            `${REVIEWER_LOGIN} approved head ${pr.head} with no reviewer launched or re-requested for that head before it`,
+          );
   } else if (gate?.state === 'success')
     backstop = backstopAnswer('ok', `review/gate is green on the current head: ${gate.description}`);
   else if (round >= MAX_ROUNDS)
@@ -487,9 +511,14 @@ function compactVerdictInput(state, { now, reviewer, author = 'working', stuckSe
       user: { login: REVIEWER_LOGIN },
     })),
     reviewRequests: state.requested ? [{ login: REVIEWER_LOGIN }] : [],
-    comments: state.launches.map((launch) => ({
-      body: `<!-- ${LAUNCH_MARKER} ${JSON.stringify({ ...launch, at: stamp(launch.at) })} -->`,
-    })),
+    comments: [
+      ...state.launches.map((launch) => ({
+        body: `<!-- ${LAUNCH_MARKER} ${JSON.stringify({ ...launch, at: stamp(launch.at) })} -->`,
+      })),
+      ...(state.requests ?? []).map((request) => ({
+        body: `<!-- ${REQUEST_MARKER} ${JSON.stringify({ ...request, at: stamp(request.at) })} -->`,
+      })),
+    ],
     timeline:
       state.requested_at === null || state.requested_at === undefined
         ? []
@@ -583,6 +612,7 @@ export function backstopDecision({
   requested,
   requestedAt = null,
   launches,
+  requests = [],
   gate = null,
   author,
   reviewer,
@@ -606,6 +636,7 @@ export function backstopDecision({
         requested,
         requested_at: Number.isFinite(requestedAt) ? Math.floor(requestedAt / 1000) : null,
         launches,
+        requests,
         gate,
       },
       { now: Math.floor(now / 1000), reviewer, author },
@@ -621,7 +652,7 @@ async function main() {
   const mode = process.argv[2];
   if (mode === 'constants') {
     process.stdout.write(
-      `${JSON.stringify({ reviewer: REVIEWER_LOGIN, launchMarker: LAUNCH_MARKER, maxRounds: MAX_ROUNDS, maxLaunches: MAX_LAUNCHES_PER_ROUND })}\n`,
+      `${JSON.stringify({ reviewer: REVIEWER_LOGIN, launchMarker: LAUNCH_MARKER, requestMarker: REQUEST_MARKER, maxRounds: MAX_ROUNDS, maxLaunches: MAX_LAUNCHES_PER_ROUND })}\n`,
     );
     return;
   }
