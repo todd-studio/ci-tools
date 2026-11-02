@@ -2,7 +2,10 @@
   "guardedFiles": [
     "ci-fetch.sh",
     ".github/workflows/ci.yml",
-    ".github/workflows/review-gate.yml"
+    ".github/workflows/review-gate.yml",
+    ".github/workflows/dependabot-auto-merge.yml",
+    "dependabot-auto-merge/dependabot-auto-merge.mjs",
+    ".github/dependabot-auto-merge.json"
   ],
   "guardedEntryPoints": ["review-gate/review-gate.mjs"],
   "dependabot": true
