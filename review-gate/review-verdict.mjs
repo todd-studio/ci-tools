@@ -24,7 +24,12 @@ const FULL_SHA = /^[0-9a-f]{40}$/;
 const RFC3339 = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|([+-])(\d{2}):(\d{2}))$/;
 
 export function parseLane(body) {
-  const cleaned = (body ?? '').replace(/<!--[\s\S]*?(?:-->|$)/g, '');
+  // Footer appends must not change the verdict, even if they close an old comment.
+  // Cut at a whole marker line first; prose may mention the marker before the Lane.
+  const bodyLines = (body ?? '').split('\n');
+  const footer = bodyLines.findIndex((line) => line.trim().toLowerCase() === '<!-- codesmith:footer -->');
+  const beforeFooter = (footer < 0 ? bodyLines : bodyLines.slice(0, footer)).join('\n');
+  const cleaned = beforeFooter.replace(/<!--[\s\S]*?(?:-->|$)/g, '');
   const lines = cleaned.split('\n').filter((candidate) => /^\s*-?\s*Lane\s*:/i.test(candidate));
   if (lines.length !== 1) return 'undeclared';
   const [line] = lines;

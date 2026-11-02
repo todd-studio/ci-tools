@@ -9,6 +9,7 @@ import {
   evaluateWaitOutcome,
   launchRecords,
   LAUNCH_MARKER,
+  parseLane,
   reviewerDecisions,
   seatScopes,
   seatSweepDecision,
@@ -47,6 +48,47 @@ const base = {
   reviewer: 'dead',
   now: NOW,
 };
+
+test('literal Blacksmith footer appends preserve lane verdicts', () => {
+  // Start with workstation's review-gate skip matrix, keeping only accepted footer appends.
+  const bodies = [
+    'A body\n\n- Lane: ordinary\n',
+    'A body\n\n- Lane: guarded\n',
+    'A body without a lane line\n',
+    'Lane inside a comment\n<!-- - Lane: ordinary -->\n',
+    'Unclosed comment swallows the append\n<!-- trailing\n',
+    'A body\n\n- Lane: ordinary<!--\n',
+    'A body\n\n- Lane: guarded <!-- note\n',
+    'A body\n\n- Lane: ordinary\n- Lane: guarded\n',
+    'Prose mentions `<!-- codesmith:footer -->` before the lane\n- Lane: ordinary\n',
+    '- Lane: guarded\n<!-- codesmith:footer -->\n- Lane: ordinary\n',
+  ];
+  const appends = [
+    '\n<!-- codesmith:footer -->\n---\n<img alt="[code]smith">\n<!-- /codesmith:footer -->\n',
+    '\n<!-- codesmith:footer -->\n- Lane: guarded\n',
+    '\n<!-- codesmith:footer -->\n- Lane: ordinary\n',
+    '\n<!-- CODESMITH:FOOTER -->\n-->-extra\n- Lane: ordinary\n',
+  ];
+  for (const from of bodies) {
+    for (const append of appends) {
+      assert.equal(parseLane(from + append), parseLane(from), JSON.stringify({ from, append }));
+    }
+  }
+});
+
+test('only a standalone footer marker ends the exactly-one declaration region', () => {
+  const cases = [
+    ['Prose mentions `<!-- codesmith:footer -->`\n- Lane: ordinary\n', 'ordinary'],
+    ['<!-- codesmith:footer -->-extra\n- Lane: guarded\n', 'guarded'],
+    ['- Lane: guarded\n \t<!-- CoDeSmItH:FoOtEr --> \r\n- Lane: ordinary\n', 'guarded'],
+    ['- Lane: ordinary\n<!-- codesmith:footer -->\n- Lane: guarded\n<!-- codesmith:footer -->\n', 'ordinary'],
+    ['<!-- codesmith:footer -->\n- Lane: ordinary\n', 'undeclared'],
+    ['<!-- codesmith:footer -->', 'undeclared'],
+    ['- Lane: ordinary\n- Lane: guarded\n<!-- codesmith:footer -->\n', 'undeclared'],
+    ['<!-- unclosed\n<!-- codesmith:footer -->\n-->\n- Lane: ordinary\n', 'undeclared'],
+  ];
+  for (const [body, expected] of cases) assert.equal(parseLane(body), expected, body);
+});
 
 test('launch records are read from the comment marker, oldest first, and malformed ones are skipped', () => {
   const records = launchRecords([
