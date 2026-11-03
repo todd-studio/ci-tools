@@ -3,6 +3,9 @@
 Shared CI tooling for todd-studio repositories. One canonical home per concern — consumers fetch
 what they need at a pinned commit rather than carrying a copy that can drift.
 
+New here? Start with [docs/start-here.md](docs/start-here.md), then the
+[architecture map](ARCHITECTURE.md). This README is the reference a consumer copies from.
+
 ## ci-fetch.sh
 
 Fetch a pinned release artifact and refuse to produce it unless its SHA-256 matches. CI downloads
