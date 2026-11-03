@@ -1,4 +1,7 @@
-# ci-tools architecture
+---
+title: Architecture map
+description: What ci-tools is, its four tools and where each one's job ends, how a project fetches and runs them, where data lives, how a change is published, and the decisions behind that shape.
+---
 
 ci-tools is four independent tools that other repositories' CI downloads at a pinned commit and
 checks before running. It runs nothing of its own except its CI and its own review gate. This page

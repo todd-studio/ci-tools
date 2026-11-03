@@ -1,4 +1,4 @@
-# `review/gate` stays pending
+# The review gate stays pending
 
 ## What you see
 
@@ -35,7 +35,7 @@ not be fetched or failed their hash check.
      malformed. The settings file is guarded, so that fix needs a reviewer.
    - **Head moved:** nothing to fix. The push that moved it starts a fresh evaluation.
    - **A fetch or hash failure:** see
-     [`ci-fetch: REFUSING` stops a CI run](ci-fetch-refuses-a-download.md).
+     [ci-fetch says REFUSING and stops a CI run](ci-fetch-refuses-a-download.md).
    - **No pin:** the project has not set up the gate; the README's `review-gate/` section shows
      what it needs.
 3. To re-run the gate once the cause is fixed, push to the pull request or edit its body. Either

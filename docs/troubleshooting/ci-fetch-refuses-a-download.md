@@ -1,4 +1,4 @@
-# `ci-fetch: REFUSING` stops a CI run
+# ci-fetch says REFUSING and stops a CI run
 
 ## What you see
 

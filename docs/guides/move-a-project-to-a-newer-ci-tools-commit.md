@@ -54,7 +54,7 @@ Not every project has every pin; a project without a file does not use that tool
 
 6. **Check the run.** Each verified file prints `ci-fetch: verified <file> -> <path>`. A run that
    prints `ci-fetch: REFUSING` instead has a hash that does not match the commit; see
-   [`ci-fetch: REFUSING` stops a CI run](../troubleshooting/ci-fetch-refuses-a-download.md).
+   [ci-fetch says REFUSING and stops a CI run](../troubleshooting/ci-fetch-refuses-a-download.md).
 
 The review gate runs from the default branch, so a new review-gate pin takes effect on pull
 requests opened or updated after the pin merges, not on the pull request that moves it.
