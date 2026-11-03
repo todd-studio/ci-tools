@@ -45,5 +45,5 @@ the change as guarded and waits for a reviewer.
      re-run the failed run from Actions. It reads the settings and secrets afresh.
    - **Armed, but `review/gate` is red:** set `"dependabot": true` in the project's
      `.github/review-gate.json`, or review the pull request. See
-     [`review/gate` is red](review-gate-is-red.md).
+     [The review gate is red](review-gate-is-red.md).
    - **Armed, but a CI check is red:** the update broke something; it needs a person.

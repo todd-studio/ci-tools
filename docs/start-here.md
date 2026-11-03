@@ -43,9 +43,9 @@ own `main` rather than a pin.
   - [Move a project to a newer ci-tools commit](guides/move-a-project-to-a-newer-ci-tools-commit.md)
   - [Change a tool without breaking the projects that use it](guides/change-a-tool-without-breaking-its-users.md)
 - Troubleshooting, one symptom each:
-  - [`ci-fetch: REFUSING` stops a CI run](troubleshooting/ci-fetch-refuses-a-download.md)
-  - [`review/gate` stays pending](troubleshooting/review-gate-stays-pending.md)
-  - [`review/gate` is red](troubleshooting/review-gate-is-red.md)
+  - [ci-fetch says REFUSING and stops a CI run](troubleshooting/ci-fetch-refuses-a-download.md)
+  - [The review gate stays pending](troubleshooting/review-gate-stays-pending.md)
+  - [The review gate is red](troubleshooting/review-gate-is-red.md)
   - [The docs check says "cannot decide"](troubleshooting/docs-check-cannot-decide.md)
   - [A Dependabot update does not merge on its own](troubleshooting/dependabot-update-does-not-merge.md)
 - The [README](../README.md) is the developer reference: the exact fetch steps, settings and

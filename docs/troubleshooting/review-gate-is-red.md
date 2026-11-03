@@ -1,4 +1,4 @@
-# `review/gate` is red
+# The review gate is red
 
 ## What you see
 
