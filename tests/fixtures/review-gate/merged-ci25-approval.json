@@ -1,0 +1,13 @@
+{
+  "source": "gh api repos/todd-studio/ci-tools/pulls/25/reviews; projected review5730576679 id/state/commit_id/submitted_at/html_url/user.login \u2014 captured 2026-11-07 on mac-main; unrelated fields omitted",
+  "reply": {
+    "id": 5730576679,
+    "state": "APPROVED",
+    "commit_id": "8a6a71ac99c0dc515c6058509e2f9cc60ae6677e",
+    "submitted_at": "2026-11-01T22:30:41Z",
+    "html_url": "https://github.com/todd-studio/ci-tools/pull/25#pullrequestreview-5730576679",
+    "user": {
+      "login": "toddreviewer01"
+    }
+  }
+}
