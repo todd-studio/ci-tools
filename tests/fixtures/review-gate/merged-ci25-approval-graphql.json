@@ -1,0 +1,14 @@
+{
+  "source": "gh pr view 25 --repo todd-studio/ci-tools --json reviews \u2014 captured 2026-11-07 on mac-main; projected id/state/commit/submittedAt/author.login only",
+  "reply": {
+    "id": "PRR_kwDOUPAShs8AAAABVZGpJw",
+    "state": "APPROVED",
+    "commit": {
+      "oid": "8a6a71ac99c0dc515c6058509e2f9cc60ae6677e"
+    },
+    "submittedAt": "2026-11-01T22:30:41Z",
+    "author": {
+      "login": "toddreviewer01"
+    }
+  }
+}

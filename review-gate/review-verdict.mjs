@@ -65,7 +65,11 @@ function normalizedReview(review, fallbackId = null) {
   const login = review?.user?.login ?? review?.author?.login;
   const head = review?.commit_id ?? review?.commit?.oid;
   const submittedAt = review?.submitted_at ?? review?.submittedAt;
-  const id = review?.id ?? fallbackId;
+  // GraphQL exposes an opaque node ID, not the numeric REST ordering key.
+  // Keep its inventory order as the tie-breaker, just as when no ID is selected.
+  const graphqlNodeId = review?.commit_id === undefined && typeof review?.commit?.oid === 'string' &&
+    typeof review?.author?.login === 'string' && typeof review?.id === 'string';
+  const id = graphqlNodeId ? fallbackId : review?.id ?? fallbackId;
   if (
     !Number.isSafeInteger(id) ||
     id < 1 ||
