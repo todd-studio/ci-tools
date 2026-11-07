@@ -9,7 +9,7 @@ import {
   authorLiveness,
   backstopDecision,
   evaluateWaitOutcome,
-  pendingRecovery,
+  evaluateRecoveryCleanup,
   launchRecords,
   LAUNCH_MARKER,
   parseLane,
@@ -548,24 +548,31 @@ test('recovery uses its launch request and keeps native request, time and launch
   assert.equal(evaluateWaitOutcome({ ...state, launches: [launch, launch, launch] }, recoveryOptions).outcome, 'give-up');
 });
 
-test('shared cleanup holds only a bounded explicit merged recovery until a real exact-head verdict', () => {
+test('shared cleanup covers startup intent, correlated seat and bounded failure cleanup', () => {
   const approval = readFixture('review-gate/merged-ci25-approval.json');
   const now = Date.parse(approval.submitted_at) - 1000;
-  const record = { v: 1, recovery: true, head: approval.commit_id, family: 'kimi', terminal: 't', at: new Date(now - 60_000).toISOString() };
-  const comment = (extra = {}) => ({ body: `<!-- ws-review-launch ${JSON.stringify({ ...record, ...extra })} -->` });
-  const input = { pullRequest: { state: 'MERGED', head: approval.commit_id }, reviews: [], comments: [comment()], now };
-  assert.equal(pendingRecovery(input), true);
-  for (const extra of [{ recovery: false }, { failed: true }, { head: OLD }, { at: new Date(now + 1).toISOString() }, { at: new Date(now - 1800_000).toISOString() }]) {
-    assert.equal(pendingRecovery({ ...input, comments: [comment(extra)] }), false);
-  }
-  assert.equal(pendingRecovery({ ...input, comments: [comment(), comment({ failed: true, at: new Date(now).toISOString() })] }), false);
-  assert.equal(pendingRecovery({ ...input, comments: [comment(), comment(), comment(), comment()] }), false);
-  assert.equal(pendingRecovery({ ...input, pullRequest: { ...input.pullRequest, state: 'CLOSED' } }), false);
-  assert.equal(pendingRecovery({ ...input, reviews: [approval], now: now + 2000 }), false);
-  assert.equal(pendingRecovery({ ...input, reviews: [{ ...approval, commit_id: OLD }], now: now + 2000 }), true);
-  assert.equal(pendingRecovery({ ...input, reviews: [{ ...approval, user: { login: 'toddagent01' } }], now: now + 2000 }), true);
-  assert.equal(pendingRecovery({ ...input, reviews: [{ ...approval, state: 'CHANGES_REQUESTED' }], now: now + 2000 }), false);
-  assert.throws(() => pendingRecovery({ ...input, reviews: null }), /unreadable/);
+  const intent = { v: 1, recovery: true, attempt: 'attempt-1', head: approval.commit_id, host: 'mac-main', workspace: 'ws', at: new Date(now - 60_000).toISOString() };
+  const comment = (marker, record) => ({ body: `<!-- ${marker} ${JSON.stringify(record)} -->` });
+  const request = (extra = {}) => comment('ws-review-request', { ...intent, ...extra });
+  const launched = (extra = {}) => comment('ws-review-launch', { ...intent, family: 'kimi', terminal: 't', at: new Date(now - 30_000).toISOString(), ...extra });
+  const input = { pullRequest: { state: 'MERGED', head: approval.commit_id }, reviews: [], comments: [request()], now };
+  const action = (extra = {}) => evaluateRecoveryCleanup({ ...input, ...extra }).action;
+  assert.equal(action(), 'hold'); // before terminal creation or readiness
+  assert.equal(action({ comments: [request(), launched()] }), 'hold');
+  for (const extra of [{ recovery: false }, { head: OLD }, { at: new Date(now + 1).toISOString() }, { at: new Date(now - 1800_000).toISOString() }])
+    assert.equal(action({ comments: [request(extra)] }), 'reclaim');
+  assert.equal(action({ comments: [request(), launched({ failed: true })] }), 'reclaim');
+  assert.equal(action({ comments: [request(), launched({ failed: true, attempt: 'old-attempt' })] }), 'hold');
+  assert.equal(action({ comments: [request({ at: new Date(now - 1800_000).toISOString() }), launched()] }), 'reclaim');
+  assert.equal(action({ comments: [request(), launched(), launched(), launched(), launched()] }), 'reclaim');
+  assert.equal(action({ comments: [request(), launched({ failed: true }), request({ attempt: 'attempt-2', at: new Date(now - 1000).toISOString() })] }), 'hold');
+  assert.equal(action({ pullRequest: { ...input.pullRequest, state: 'CLOSED' } }), 'reclaim');
+  assert.equal(action({ pullRequest: { state: 'OPEN' } }), 'hold');
+  assert.equal(action({ reviews: [approval], now: now + 2000 }), 'reclaim');
+  assert.equal(action({ reviews: [{ ...approval, commit_id: OLD }], now: now + 2000 }), 'hold');
+  assert.equal(action({ reviews: [{ ...approval, user: { login: 'toddagent01' } }], now: now + 2000 }), 'hold');
+  assert.equal(action({ reviews: [{ ...approval, state: 'CHANGES_REQUESTED' }], now: now + 2000 }), 'reclaim');
+  assert.throws(() => action({ reviews: null }), /unreadable/);
 });
 
 test('recovery request mode stops on exact-head verdict, withdrawal stays pending, and timeout stops the seat', () => {
@@ -577,4 +584,11 @@ test('recovery request mode stops on exact-head verdict, withdrawal stays pendin
   assert.equal(evaluateWaitOutcome({ ...state, decisions: [{ ...approval, state: 'DISMISSED' }] }, { ...recoveryOptions, mode: 'request' }).outcome, 'requested');
   assert.equal(evaluateWaitOutcome(state, { ...recoveryOptions, mode: 'request', now: recoveryOptions.now + 1800 }).outcome, 'done');
   assert.throws(() => evaluateWaitOutcome({ ...state, launches: [{ ...launch, at: recoveryOptions.now + 1 }] }, recoveryOptions), /future/);
+});
+
+test('recovery request mode works during startup before any launch or GitHub review request', () => {
+  const intent = { v: 1, recovery: true, attempt: 'startup', head: mergedCapture.head, host: 'mac-main', workspace: 'ws', at: recoveryOptions.now - 60 };
+  const state = mergedState({ requests: [intent] });
+  assert.equal(evaluateWaitOutcome(state, { ...recoveryOptions, mode: 'request' }).outcome, 'requested');
+  assert.equal(evaluateWaitOutcome(state, { ...recoveryOptions, mode: 'request', now: recoveryOptions.now + 1800 }).outcome, 'done');
 });
