@@ -592,3 +592,11 @@ test('recovery request mode works during startup before any launch or GitHub rev
   assert.equal(evaluateWaitOutcome(state, { ...recoveryOptions, mode: 'request' }).outcome, 'requested');
   assert.equal(evaluateWaitOutcome(state, { ...recoveryOptions, mode: 'request', now: recoveryOptions.now + 1800 }).outcome, 'done');
 });
+
+test('cleanup accepts the actual gh pr view review shape with GraphQL node IDs', () => {
+  const approval = readFixture('review-gate/merged-ci25-approval-graphql.json');
+  assert.equal(evaluateRecoveryCleanup({
+    pullRequest: { state: 'MERGED', head: approval.commit.oid },
+    reviews: [approval], comments: [], now: Date.parse(approval.submittedAt) + 1000,
+  }).action, 'reclaim');
+});
