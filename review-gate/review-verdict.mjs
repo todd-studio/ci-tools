@@ -234,13 +234,16 @@ export function evaluateReviewVerdict(input) {
   const decisions = reviewerDecisions(input.reviews, { strict: true });
   const launches = launchRecords(input.comments);
   const requests = requestRecords(input.comments);
-  const requested = requestedReviewer(input.reviewRequests);
-  const requestedAt = latestRequestedAt(input.timeline);
+  const recovery = input.recovery === true && state === 'MERGED';
+  const githubRequested = requestedReviewer(input.reviewRequests);
+  const githubRequestedAt = latestRequestedAt(input.timeline);
   const gate = publishedGate(input.statuses);
   const now = input.now;
   const stuckMs = input.stuckMs ?? STUCK_MS;
   const earlyDeathMs = input.earlyDeathMs ?? EARLY_DEATH_MS;
   if (!Number.isFinite(now)) throw new Error('the verdict clock is unreadable');
+  if (recovery && ([...launches, ...requests].some((record) => record.at > now) || decisions.some((review) => review.at > now)))
+    throw new Error('the recovery inventory contains a future timestamp');
   if (!Number.isFinite(stuckMs) || stuckMs < 0 || !Number.isFinite(earlyDeathMs) || earlyDeathMs < 0)
     throw new Error('the review timing policy is unreadable');
   if (
@@ -248,6 +251,10 @@ export function evaluateReviewVerdict(input) {
     !['live', 'dead', 'unknown', 'none'].includes(input.reviewer)
   )
     throw new Error('the reviewer liveness is unreadable');
+
+  const lease = recovery ? recoveryLease({ head: pr.head, decisions, launches, requests, now, stuckMs }) : null;
+  const requested = recovery ? lease.request?.head === pr.head : githubRequested;
+  const requestedAt = recovery ? lease.request?.at ?? null : githubRequestedAt;
 
   // The current-head reduction is independent of a newer review on an older
   // commit: GitHub can deliver those out of commit order, and only a decision
@@ -284,10 +291,13 @@ export function evaluateReviewVerdict(input) {
   const launchesThisRound = launches.filter((launch) => launch.at > roundStart && launch.failed !== true);
   const newest = launches.at(-1) ?? null;
   const newestSeated = launches.filter((launch) => launch.failed !== true).at(-1) ?? null;
-  const start = `ws review start ${pr.number}`;
+  const start = `ws review start ${pr.number}${recovery ? ' --after-merge' : ''}`;
   let wait;
-  if (state === 'MERGED')
-    wait = waitAnswer('approved', 'done', 'the pull request merged', round, pr.head, launchesThisRound, input.reviewer);
+  if (state === 'MERGED' && !recovery)
+    wait = waitAnswer(
+      input.workflowCompletion === true ? 'done' : 'approved',
+      'done', 'the pull request merged', round, pr.head, launchesThisRound, input.reviewer,
+    );
   else if (state === 'CLOSED')
     wait = waitAnswer(
       'give-up',
@@ -298,7 +308,7 @@ export function evaluateReviewVerdict(input) {
       launchesThisRound,
       input.reviewer,
     );
-  else if (directApproval && gate?.state === 'failure')
+  else if (!recovery && directApproval && gate?.state === 'failure')
     wait = waitAnswer(
       'gate-stale',
       'call again',
@@ -311,14 +321,14 @@ export function evaluateReviewVerdict(input) {
   else if (directApproval)
     wait = waitAnswer(
       'approved',
-      'done — the merge follows when every required check is green',
+      recovery ? 'done — the independent read is approved' : 'done — the merge follows when every required check is green',
       `toddreviewer01 approved head ${pr.head}`,
       round,
       pr.head,
       launchesThisRound,
       input.reviewer,
     );
-  else if (gate?.state === 'success')
+  else if (!recovery && gate?.state === 'success')
     wait = waitAnswer(
       'approved',
       'done — the merge follows when every required check is green',
@@ -347,6 +357,13 @@ export function evaluateReviewVerdict(input) {
       pr.head,
       launchesThisRound,
       input.reviewer,
+    );
+  else if (recovery && requestedAt !== null && now - requestedAt >= stuckMs)
+    wait = waitAnswer(
+      'reviewer-stuck',
+      `run: ${start} --fresh`,
+      'the merged recovery exceeded its bounded review time',
+      round, pr.head, launchesThisRound, input.reviewer,
     );
   else if (!requested)
     wait = waitAnswer(
@@ -541,13 +558,28 @@ function compactVerdictInput(state, { now, reviewer, author = 'working', stuckSe
 
 // `ws review wait` has its own compact GitHub read, but no verdict policy:
 // it normalizes that read and returns the shared wait projection.
-export function evaluateWaitOutcome(state, { now, reviewer, mode, stuckSeconds, earlyDeathSeconds }) {
+export function evaluateWaitOutcome(state, {
+  now, reviewer, mode, recovery = false, workflowCompletion = false, stuckSeconds, earlyDeathSeconds,
+}) {
   const input = compactVerdictInput(state, { now, reviewer, stuckSeconds, earlyDeathSeconds });
+  input.recovery = recovery;
+  input.workflowCompletion = workflowCompletion;
   const verdict = evaluateReviewVerdict(input);
+  const recovering = recovery === true && input.pullRequest.state === 'MERGED';
   if (mode !== 'request') return verdict.wait;
   const round = verdict.decisions.length;
   const latest = verdict.decisions.at(-1) ?? null;
-  if (input.pullRequest.state === 'MERGED')
+  if (recovering) {
+    const current = verdict.decisions.filter((review) => review.head === input.pullRequest.head).at(-1);
+    if (current && current.state !== 'DISMISSED')
+      return { ...verdict.wait, outcome: 'done', next: 'stop', reason: 'the current head has an independent reviewer verdict' };
+    const lease = recoveryLease({ head: input.pullRequest.head, decisions: verdict.decisions, launches: verdict.launches, requests: requestRecords(input.comments), now: input.now, stuckMs: input.stuckMs });
+    if (lease.request && lease.action === 'reclaim')
+      return { ...verdict.wait, outcome: 'done', next: 'stop', reason: lease.reason };
+    if (['give-up', 'reviewer-stuck'].includes(verdict.wait.outcome))
+      return { ...verdict.wait, outcome: 'done', next: 'stop' };
+  }
+  if (input.pullRequest.state === 'MERGED' && !recovering)
     return { ...verdict.wait, outcome: 'done', next: 'stop', reason: 'the pull request merged' };
   if (input.pullRequest.state === 'CLOSED')
     return { ...verdict.wait, outcome: 'done', next: 'stop', reason: 'the pull request closed without merging' };
@@ -555,7 +587,10 @@ export function evaluateWaitOutcome(state, { now, reviewer, mode, stuckSeconds, 
     return { ...verdict.wait, outcome: 'done', next: 'stop', reason: 'the current head is approved' };
   if (round >= MAX_ROUNDS)
     return { ...verdict.wait, outcome: 'done', next: 'stop', reason: `round ${round} was the last one` };
-  return state.requested && latest?.head !== input.pullRequest.head
+  const pending = recovering
+    ? recoveryLease({ head: input.pullRequest.head, decisions: verdict.decisions, launches: verdict.launches, requests: requestRecords(input.comments), now: input.now, stuckMs: input.stuckMs }).action === 'hold'
+    : state.requested && latest?.head !== input.pullRequest.head;
+  return pending
     ? {
         ...verdict.wait,
         outcome: 'requested',
@@ -582,6 +617,47 @@ export function seatScopes(pgrepOutput) {
     if (found) seats.push({ pid: Number(found[1]), repository: found[2], number: Number(found[3]) });
   }
   return seats;
+}
+
+// Both the wait and cleanup projections consume this one recovery lease. An
+// intent covers startup before readiness; its deadline never moves when the
+// matching launch arrives. Attempt IDs keep old failures from ending a new read.
+function recoveryLease({ head, decisions, launches, requests, now, stuckMs }) {
+  const intent = requests.filter((request) => request.recovery === true).at(-1);
+  const legacyLaunch = launches.at(-1);
+  const request = intent ?? (legacyLaunch?.recovery === true ? legacyLaunch : null);
+  const reclaim = (reason) => ({ action: 'reclaim', reason, request });
+  if (!request || request.head !== head || (intent && (typeof intent.attempt !== 'string' || !intent.attempt.trim())))
+    return reclaim('no explicit recovery names the current head');
+  if (request.at > now || now - request.at >= stuckMs)
+    return reclaim('the recovery intent is outside its bounded review time');
+  const current = decisions.filter((review) => review.head === head).at(-1);
+  if (current && current.state !== 'DISMISSED') return reclaim('an independent verdict names the current head');
+  const launch = intent
+    ? launches.filter((row) => row.recovery === true && row.head === head && row.attempt === intent.attempt && row.at >= intent.at).at(-1)
+    : legacyLaunch;
+  if (launch?.failed === true) return reclaim('the recovery launch failed');
+  const roundStart = decisions.filter((review) => review.at < request.at).at(-1)?.at ?? 0;
+  const count = launches.filter((row) => row.at > roundStart && row.failed !== true).length;
+  if (decisions.length >= MAX_ROUNDS || count > MAX_LAUNCHES_PER_ROUND || (!launch && count >= MAX_LAUNCHES_PER_ROUND))
+    return reclaim('the recovery exhausted its round or seated-launch budget');
+  return { action: 'hold', reason: launch ? 'a bounded recovery seat is pending' : 'a bounded recovery intent is awaiting readiness', request };
+}
+
+// Callers own raw GitHub reads and liveness; unreadable inventory errors must
+// remain unknown there, rather than being reported as a completed review.
+export function evaluateRecoveryCleanup({ pullRequest, reviews, comments, now, stuckMs = STUCK_MS }) {
+  if (!pullRequest || !['OPEN', 'MERGED', 'CLOSED'].includes(pullRequest.state))
+    throw new Error('the pull request state is unreadable');
+  if (pullRequest.state === 'OPEN') return { action: 'hold', reason: 'the pull request is still open' };
+  if (pullRequest.state === 'CLOSED') return { action: 'reclaim', reason: 'the pull request is closed without merging' };
+  if (!FULL_SHA.test(String(pullRequest.head ?? '')) || !Number.isFinite(now) || !Number.isFinite(stuckMs) || stuckMs < 0)
+    throw new Error('the recovery cleanup state is unreadable');
+  const decisions = reviewerDecisions(reviews);
+  if (decisions.some((review) => review.at > now))
+    throw new Error('the recovery inventory contains a future timestamp');
+  const { action, reason } = recoveryLease({ head: pullRequest.head, decisions, launches: launchRecords(comments), requests: requestRecords(comments), now, stuckMs });
+  return { action, reason };
 }
 
 export function seatSweepDecision(state) {

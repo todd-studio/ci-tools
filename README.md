@@ -104,6 +104,29 @@ of the line, whitespace, a comma or an opening parenthesis for an explanation. J
 such as `guarded123`, `guarded/ordinary` and `ordinary-x` are undeclared. Unknown native-review
 states from the trusted reviewer are unreadable; `COMMENTED` and `PENDING` remain non-verdicts.
 
+The shared wait adapter accepts opt-in `recovery: true` for a merged pull request. It requires
+an actual native `toddreviewer01` verdict on the exact head; neither merge completion nor a
+green gate supplies that verdict. A `ws-review-launch` record with `recovery: true` supplies
+the request clock after GitHub clears pending requests at merge. Existing round, launch and
+time limits still apply. Normal merged waits can opt into `workflowCompletion: true` to return
+`done` instead of the legacy `approved` workflow-completion label; old defaults remain compatible.
+
+Cleanup adapters use `evaluateRecoveryCleanup({pullRequest: {state, head}, reviews, comments,
+now, stuckMs})`, returning `{action: 'hold' | 'reclaim', reason}`. Use normalized `OPEN`,
+`MERGED` or `CLOSED` state, native REST or GraphQL reviews and a millisecond clock (`stuckMs`
+defaults to 30 minutes). Open pull requests hold; closed-unmerged pull requests reclaim.
+For a merged recovery, post a `ws-review-request` v1 record before creating a terminal:
+`recovery: true`, unique nonempty `attempt`, exact `head`, RFC3339 `at`, `host` and `workspace`.
+The confirming `ws-review-launch` record carries the same `attempt` and normal launch fields;
+readiness failure posts `failed: true` for that attempt. A new attempt needs a new intent.
+
+The latest recovery intent owns its deadline; readiness never extends it. Only a matching
+attempt can confirm or fail it. A native exact-head verdict, failed matching launch, expiry
+or exhausted round/seated-launch budget ends protection. Recovery launches without an intent
+retain the bounded launch-clock behavior. Request mode can use the intent without a GitHub
+review request. Unreadable inventories throw for the caller to handle; this decision never
+changes the gate or performs cleanup. Workstation owns CLI, credentials and process liveness.
+
 A consumer runs it from a `pull_request_target` workflow that checks out its own default branch
 (never the pull request) and fetches both files at a pinned commit, each SHA-256 checked:
 

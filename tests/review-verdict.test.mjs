@@ -9,6 +9,7 @@ import {
   authorLiveness,
   backstopDecision,
   evaluateWaitOutcome,
+  evaluateRecoveryCleanup,
   launchRecords,
   LAUNCH_MARKER,
   parseLane,
@@ -508,4 +509,86 @@ test('known non-decisive trusted reviews preserve an approval', () => {
     const reviews = [approval, { ...approval, id: approval.id + 1, state }];
     assert.deepEqual(reviewerDecisions(reviews, { strict: true }).map((review) => review.state), ['APPROVED']);
   }
+});
+
+// Live captures: VC1041 had no reviews after merge; CI25 received a native
+// exact-head reviewer approval 41 seconds after merge (see review html_url).
+const mergedCapture = readFixture('review-gate/merged-vc1041.json');
+const mergedState = (extra = {}) => ({
+  ...mergedCapture,
+  created_at: Date.parse(mergedCapture.created_at) / 1000,
+  decisions: [], launches: [], requested: false, requested_at: null,
+  gate: { state: 'success', description: 'CI-only' }, ...extra,
+});
+const recoveryOptions = { now: Date.parse('2026-11-07T14:00:00Z') / 1000, reviewer: 'dead', recovery: true };
+
+test('merged workflow completion is distinct from independent approval with explicit recovery', () => {
+  assert.equal(evaluateWaitOutcome(mergedState(), { ...recoveryOptions, recovery: false, workflowCompletion: true }).outcome, 'done');
+  // Published consumers retain the previous default until opting in.
+  assert.equal(evaluateWaitOutcome(mergedState(), { ...recoveryOptions, recovery: false }).outcome, 'approved');
+  assert.equal(evaluateWaitOutcome(mergedState(), recoveryOptions).outcome, 'unrequested');
+  assert.equal(evaluateWaitOutcome(mergedState({ merged: false, state: 'CLOSED' }), recoveryOptions).outcome, 'give-up');
+});
+
+test('recovery requires an actual native exact-head verdict and ignores gate failure after approval', () => {
+  const captured = readFixture('review-gate/merged-ci25-approval.json');
+  const state = mergedState({ head: captured.commit_id, decisions: [{ state: captured.state, commit: captured.commit_id, at: Date.parse(captured.submitted_at) / 1000 }], gate: { state: 'failure' } });
+  assert.equal(evaluateWaitOutcome(state, recoveryOptions).outcome, 'approved');
+  assert.equal(evaluateWaitOutcome({ ...state, head: mergedCapture.head }, recoveryOptions).outcome, 'unrequested');
+  assert.equal(evaluateWaitOutcome({ ...state, decisions: [{ ...state.decisions[0], state: 'CHANGES_REQUESTED' }] }, recoveryOptions).outcome, 'changes');
+});
+
+test('recovery uses its launch request and keeps native request, time and launch budgets bounded', () => {
+  const launch = { v: 1, recovery: true, head: mergedCapture.head, family: 'kimi', terminal: 't', at: recoveryOptions.now - 60 };
+  const state = mergedState({ launches: [launch] });
+  assert.equal(evaluateWaitOutcome(state, { ...recoveryOptions, reviewer: 'live' }).outcome, 'waiting');
+  assert.equal(evaluateWaitOutcome(state, { ...recoveryOptions, mode: 'request' }).outcome, 'requested');
+  assert.equal(evaluateWaitOutcome(state, { ...recoveryOptions, mode: 'request', recovery: false }).outcome, 'done');
+  assert.equal(evaluateWaitOutcome(state, { ...recoveryOptions, reviewer: 'live', now: recoveryOptions.now + 1800 }).outcome, 'reviewer-stuck');
+  assert.equal(evaluateWaitOutcome({ ...state, launches: [launch, launch, launch] }, recoveryOptions).outcome, 'give-up');
+});
+
+test('shared cleanup covers startup intent, correlated seat and bounded failure cleanup', () => {
+  const approval = readFixture('review-gate/merged-ci25-approval.json');
+  const now = Date.parse(approval.submitted_at) - 1000;
+  const intent = { v: 1, recovery: true, attempt: 'attempt-1', head: approval.commit_id, host: 'mac-main', workspace: 'ws', at: new Date(now - 60_000).toISOString() };
+  const comment = (marker, record) => ({ body: `<!-- ${marker} ${JSON.stringify(record)} -->` });
+  const request = (extra = {}) => comment('ws-review-request', { ...intent, ...extra });
+  const launched = (extra = {}) => comment('ws-review-launch', { ...intent, family: 'kimi', terminal: 't', at: new Date(now - 30_000).toISOString(), ...extra });
+  const input = { pullRequest: { state: 'MERGED', head: approval.commit_id }, reviews: [], comments: [request()], now };
+  const action = (extra = {}) => evaluateRecoveryCleanup({ ...input, ...extra }).action;
+  assert.equal(action(), 'hold'); // before terminal creation or readiness
+  assert.equal(action({ comments: [request(), launched()] }), 'hold');
+  for (const extra of [{ recovery: false }, { head: OLD }, { at: new Date(now + 1).toISOString() }, { at: new Date(now - 1800_000).toISOString() }])
+    assert.equal(action({ comments: [request(extra)] }), 'reclaim');
+  assert.equal(action({ comments: [request(), launched({ failed: true })] }), 'reclaim');
+  assert.equal(action({ comments: [request(), launched({ failed: true, attempt: 'old-attempt' })] }), 'hold');
+  assert.equal(action({ comments: [request({ at: new Date(now - 1800_000).toISOString() }), launched()] }), 'reclaim');
+  assert.equal(action({ comments: [request(), launched(), launched(), launched(), launched()] }), 'reclaim');
+  assert.equal(action({ comments: [request(), launched({ failed: true }), request({ attempt: 'attempt-2', at: new Date(now - 1000).toISOString() })] }), 'hold');
+  assert.equal(action({ pullRequest: { ...input.pullRequest, state: 'CLOSED' } }), 'reclaim');
+  assert.equal(action({ pullRequest: { state: 'OPEN' } }), 'hold');
+  assert.equal(action({ reviews: [approval], now: now + 2000 }), 'reclaim');
+  assert.equal(action({ reviews: [{ ...approval, commit_id: OLD }], now: now + 2000 }), 'hold');
+  assert.equal(action({ reviews: [{ ...approval, user: { login: 'toddagent01' } }], now: now + 2000 }), 'hold');
+  assert.equal(action({ reviews: [{ ...approval, state: 'CHANGES_REQUESTED' }], now: now + 2000 }), 'reclaim');
+  assert.throws(() => action({ reviews: null }), /unreadable/);
+});
+
+test('recovery request mode stops on exact-head verdict, withdrawal stays pending, and timeout stops the seat', () => {
+  const launch = { v: 1, recovery: true, head: mergedCapture.head, at: recoveryOptions.now - 60 };
+  const state = mergedState({ launches: [launch] });
+  const approval = { state: 'APPROVED', commit: mergedCapture.head, at: recoveryOptions.now - 10 };
+  const old = { state: 'CHANGES_REQUESTED', commit: OLD, at: recoveryOptions.now - 5 };
+  assert.equal(evaluateWaitOutcome({ ...state, decisions: [approval, old] }, { ...recoveryOptions, mode: 'request' }).outcome, 'done');
+  assert.equal(evaluateWaitOutcome({ ...state, decisions: [{ ...approval, state: 'DISMISSED' }] }, { ...recoveryOptions, mode: 'request' }).outcome, 'requested');
+  assert.equal(evaluateWaitOutcome(state, { ...recoveryOptions, mode: 'request', now: recoveryOptions.now + 1800 }).outcome, 'done');
+  assert.throws(() => evaluateWaitOutcome({ ...state, launches: [{ ...launch, at: recoveryOptions.now + 1 }] }, recoveryOptions), /future/);
+});
+
+test('recovery request mode works during startup before any launch or GitHub review request', () => {
+  const intent = { v: 1, recovery: true, attempt: 'startup', head: mergedCapture.head, host: 'mac-main', workspace: 'ws', at: recoveryOptions.now - 60 };
+  const state = mergedState({ requests: [intent] });
+  assert.equal(evaluateWaitOutcome(state, { ...recoveryOptions, mode: 'request' }).outcome, 'requested');
+  assert.equal(evaluateWaitOutcome(state, { ...recoveryOptions, mode: 'request', now: recoveryOptions.now + 1800 }).outcome, 'done');
 });

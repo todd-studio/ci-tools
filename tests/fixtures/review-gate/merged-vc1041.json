@@ -1,0 +1,11 @@
+{
+  "source": "gh api repos/todd-studio/vehicle-catalogue/pulls/1041 and /reviews; projected number/state/merged/head.sha/created_at/reviews \u2014 captured 2026-11-07 on mac-main; unrelated fields omitted",
+  "reply": {
+    "number": 1041,
+    "state": "closed",
+    "merged": true,
+    "head": "0f218328b4f50ce5804bd5f610127984cbbeda52",
+    "created_at": "2026-11-07T13:15:34Z",
+    "reviews": []
+  }
+}
