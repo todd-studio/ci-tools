@@ -11,7 +11,7 @@ Merging on its own takes two separate things: the **Dependabot auto-merge** work
 auto-merge on the exact head, and then every required check, `review/gate` included, must be
 green. Either can be missing.
 
-The workflow leaves an update for a person, printing `Not eligible: left for review` in its
+The workflow holds an update for agent review, printing `Not eligible: left for review` in its
 **Arm eligible exact head** step, unless every one of these holds:
 
 - the pull request is open, not a draft, by Dependabot's bot account, with exactly one commit, its
@@ -38,12 +38,19 @@ the change as guarded and waits for a reviewer.
    read the last step's output.
 2. Then:
    - **`Not eligible: left for review`:** this is the policy working. A major update, a
-     multi-commit pull request or an ecosystem the project has not allowed is for a person to
-     review and merge. If the ecosystem should be allowed, add its fetch-metadata id to
+     multi-commit pull request or an ecosystem the project has not allowed receives an
+     agent-assigned review issue through the
+     **Route held update for agent review** step when the PR is trusted, open and current. The
+     lane merges it or closes it with a reason. Repeated runs reuse the same issue, including
+     closed review work; check that issue for the earlier decision. If the ecosystem should be
+     allowed, add its fetch-metadata id to
      `.github/dependabot-auto-merge.json` on the default branch.
+   - **Routing failed:** check the routing step for an API error, ensure the workflow grants
+     `issues: write`, and ensure `toddagent01` can be assigned. Re-run after fixing it; the
+     direct issue lookup reuses any work already created.
    - **The run failed:** fix the settings file on the default branch or set the App secrets, then
      re-run the failed run from Actions. It reads the settings and secrets afresh.
    - **Armed, but `review/gate` is red:** set `"dependabot": true` in the project's
      `.github/review-gate.json`, or review the pull request. See
      [The review gate is red](review-gate-is-red.md).
-   - **Armed, but a CI check is red:** the update broke something; it needs a person.
+   - **Armed, but a CI check is red:** the update broke something; it needs review.

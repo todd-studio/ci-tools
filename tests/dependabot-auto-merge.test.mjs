@@ -141,3 +141,82 @@ test('the standalone CLI runs through a symlink, reads cwd settings, and clear i
   assert.doesNotMatch(readFileSync(calls, 'utf8'), /pr merge/);
   assert.match(cli(['--clear'], { UPDATED_DEPENDENCIES: 'malformed' }), /Prior auto-merge cleared/);
 });
+
+test('held updates create complete assigned review work and reuse it across runs and heads', (t) => {
+  const { settingsPath } = setup(t);
+  const captured = readFixture('dependabot-auto-merge/held-pull.json');
+  const capturedIssue = readFixture('dependabot-auto-merge/held-issue.json');
+  // Replay WS 5680 while open; issue writes replay CI 47 with the submitted
+  // routing body. Deliberate state/head edits below exercise the trust boundary.
+  let current = { ...captured, state: 'open' };
+  let currentEvent = {
+    repository: { id: captured.base.repo.id, full_name: 'todd-studio/workstation', default_branch: 'main' },
+    pull_request: current,
+  };
+  let dependencies = metadata.map((dep) => ({ ...dep, updateType: 'version-update:semver-major' }));
+  let issues = [];
+  let writes = 0;
+  let listReply;
+  let beforeWrite;
+  const run = () => armAutoMerge({
+    event: currentEvent, dependencies, settingsPath, shouldRouteHeld: true,
+    gh: (args) => {
+      assert.equal(args[0], 'api', 'routing must never arm a merge');
+      if (args[1].includes('/pulls/')) return JSON.stringify(current);
+      if (args.includes('--paginate')) {
+        beforeWrite?.();
+        return listReply ?? [[], issues].map((page) => JSON.stringify(page)).join('\n');
+      }
+      assert.equal(args[args.indexOf('--method') + 1], 'POST');
+      writes++;
+      if (args[1].endsWith('/assignees')) {
+        issues[0] = { ...issues[0], assignees: capturedIssue.assignees };
+        return JSON.stringify(issues[0]);
+      }
+      const body = args.find((arg) => arg.startsWith('body=')).slice(5);
+      assert.ok(args.includes('assignees[]=toddagent01'));
+      assert.match(body, /https:\/\/github.com\/todd-studio\/workstation\/pull\/5680/);
+      assert.match(body, /Merge it.*or close it with a reason/);
+      assert.match(body, /## Proof/);
+      assert.match(body, new RegExp(current.head.sha));
+      issues.push({ ...capturedIssue, body });
+      return JSON.stringify(issues[0]);
+    },
+  });
+  assert.match(run(), /Review work created/);
+  assert.match(run(), /Review work reused/);
+  current = { ...current, head: { ...current.head, sha: 'a'.repeat(40) } };
+  currentEvent = { ...currentEvent, pull_request: current };
+  assert.match(run(), /Review work reused/);
+  assert.equal(writes, 1);
+  issues[0].assignees = [];
+  assert.match(run(), /Review work reused/);
+  assert.equal(writes, 2, 'open work is repaired if assignment was lost');
+  issues[0].state = 'closed';
+  assert.match(run(), /Review work reused.*closed/);
+  assert.equal(writes, 2, 'closed work does not start another lane');
+  const trusted = structuredClone(current);
+  for (const edit of [
+    (pr) => { pr.state = 'closed'; }, (pr) => { pr.draft = true; },
+    (pr) => { pr.user.id = 1; }, (pr) => { pr.user.type = 'User'; },
+    (pr) => { pr.head.repo.id = 1; }, (pr) => { pr.base.repo.id = 1; },
+    (pr) => { pr.base.ref = 'other'; }, (pr) => { pr.head.sha = 'b'.repeat(40); },
+  ]) {
+    current = structuredClone(trusted);
+    edit(current);
+    assert.match(run(), /Not routed/);
+    assert.equal(writes, 2);
+  }
+  current = trusted;
+  dependencies = metadata;
+  assert.match(run(), /Not routed: no held trusted update/);
+  assert.equal(writes, 2);
+  dependencies = metadata.map((dep) => ({ ...dep, updateType: 'version-update:semver-major' }));
+  listReply = '{}';
+  assert.throws(run, /Unreadable review issue list/);
+  listReply = undefined;
+  issues = [];
+  beforeWrite = () => { current = { ...trusted, state: 'closed' }; };
+  assert.match(run(), /Not routed: pull request changed/);
+  assert.equal(writes, 2);
+});

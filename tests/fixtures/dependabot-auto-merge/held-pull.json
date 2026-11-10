@@ -1,0 +1,25 @@
+{
+  "source": "gh api repos/todd-studio/workstation/pulls/5680 \u2014 captured 2026-11-10 on toddagent02@mac-main; trimmed to routing fields",
+  "reply": {
+    "number": 5680,
+    "state": "closed",
+    "draft": false,
+    "user": {
+      "id": 49699333,
+      "type": "Bot"
+    },
+    "head": {
+      "sha": "6c404bc5e463f9ec4d91f79b2563ce6ae352c9b3",
+      "repo": {
+        "id": 1342441770
+      }
+    },
+    "base": {
+      "ref": "main",
+      "repo": {
+        "id": 1342441770
+      }
+    },
+    "commits": 1
+  }
+}
