@@ -1,12 +1,17 @@
 {
-  "source": "gh api repos/todd-studio/ci-tools/issues/47 \u2014 captured 2026-11-10 on toddagent02@mac-main; trimmed to routing fields",
   "reply": {
-    "number": 47,
-    "state": "open",
     "assignees": [
       {
         "login": "toddagent01"
       }
-    ]
-  }
+    ],
+    "number": 47,
+    "state": "open",
+    "user": {
+      "id": 321206552,
+      "login": "toddagent01",
+      "type": "User"
+    }
+  },
+  "source": "gh api repos/todd-studio/ci-tools/issues/47 \u2014 captured 2026-11-10; trimmed to routing fields and creator provenance"
 }

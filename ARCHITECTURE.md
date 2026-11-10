@@ -126,7 +126,8 @@ dependency a minor or patch update in an ecosystem listed in `.github/dependabot
 
 With `--route-held`, the same helper instead creates or reuses an agent-assigned GitHub issue
 for a trusted open update that policy holds. The stable source-PR marker survives later heads
-and closed review work; the existing lane router assignment sweep discovers it. Consumers
+and closed review work only when the immutable creator is the GitHub Actions bot; copied markers
+from other creators are ignored. The existing lane router assignment sweep discovers the work. Consumers
 serialize the calls per PR and use their workflow token with `issues: write` for routing.
 
 Its boundary: it requests auto-merge or routes held review work; it never decides the review.

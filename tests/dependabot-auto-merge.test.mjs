@@ -172,7 +172,7 @@ test('held updates create complete assigned review work and reuse it across runs
         return listReply ?? [[], issues].map((page) => JSON.stringify(page)).join('\n');
       }
       if (!args.includes('--method')) {
-        return JSON.stringify(omitMetadataReadback ? { ...issues[0], issue_field_values: [] } : issues[0]);
+        return JSON.stringify(omitMetadataReadback ? { ...issues.at(-1), issue_field_values: [] } : issues.at(-1));
       }
       if (args[args.indexOf('--method') + 1] === 'PATCH') {
         writes++;
@@ -202,7 +202,7 @@ test('held updates create complete assigned review work and reuse it across runs
       assert.match(body, /## Proof/);
       assert.match(body, new RegExp(current.head.sha));
       issues.push({ ...capturedIssue, ...capturedMetadata, body });
-      return JSON.stringify(issues[0]);
+      return JSON.stringify(issues.at(-1));
     },
   });
   assert.match(run(), /Review work created/);
@@ -255,4 +255,27 @@ test('held updates create complete assigned review work and reuse it across runs
   assert.equal(issues[0].issue_field_values[0].single_select_option.name, 'Medium');
   settings({ ecosystems: ['npm_and_yarn'] });
   assert.throws(run, /requires reviewPriorityFieldId/);
+  settings({ ecosystems: ['npm_and_yarn'], reviewPriorityFieldId: 46102352 });
+  const genuine = structuredClone(issues[0]);
+  // A public marker authenticates nothing. Replay a real non-workflow creator,
+  // including a spoof that copies the bot's login, ID or type individually.
+  for (const user of [
+    capturedIssue.user,
+    { ...capturedIssue.user, login: capturedMetadata.user.login },
+    { ...capturedIssue.user, id: capturedMetadata.user.id },
+    { ...capturedMetadata.user, id: capturedIssue.user.id },
+    undefined,
+  ]) {
+    for (const state of ['open', 'closed']) {
+      const spoof = { ...genuine, number: capturedIssue.number, user, state, assignees: [],
+        body: genuine.body.split('\n')[0] + '\nUnrelated opener-controlled text' };
+      issues = [structuredClone(spoof)];
+      const before = writes;
+      assert.match(run(), /Review work created/, 'ignore open and closed marker spoofs');
+      assert.deepEqual(issues[0], spoof, 'never repair or assign the untrusted issue');
+      assert.equal(writes, before + 1, 'only create genuine assigned work');
+      assert.match(run(), /Review work reused/, 'genuine work wins over an earlier spoof');
+      assert.equal(writes, before + 1);
+    }
+  }
 });

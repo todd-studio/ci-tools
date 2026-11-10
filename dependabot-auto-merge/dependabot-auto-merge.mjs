@@ -76,19 +76,23 @@ function routeHeldPull({ repository, number, expectedHead, gh, stillHeld, review
   }
   const marker = `<!-- ci-tools:dependabot-review ${repository}#${number} -->`;
   const assignee = "toddagent01";
+  // The marker is public and copyable. Only this immutable GitHub Actions
+  // creator identity proves workflow-owned work, including closed decisions.
+  const workflowBotId = 41898282;
+  const trustedCreator = (issue) => issue?.user?.id === workflowBotId && issue.user.type === "Bot";
   const pages = gh([
     "api", `repos/${repository}/issues?state=all&per_page=100`, "--paginate",
     // Filter before gh returns the body: a large repository's issue history
     // otherwise exceeds execFileSync's output buffer. JSON quoting is jq-safe.
-    "--jq", `[.[] | select(.pull_request == null and ((.body // "" | split("\\n") | index(${JSON.stringify(marker)})) != null))] | @json`,
+    "--jq", `[.[] | select(.pull_request == null and .user.id == ${workflowBotId} and .user.type == "Bot" and ((.body // "" | split("\\n") | index(${JSON.stringify(marker)})) != null))] | @json`,
   ]).trim().split("\n").map((page) => JSON.parse(page));
   if (!Array.isArray(pages) || pages.length === 0 || pages.some((page) => !Array.isArray(page))) {
     throw new Error("Unreadable review issue list");
   }
   let existing = pages.flat().find((issue) =>
-    !issue.pull_request && typeof issue.body === "string" && issue.body.split("\n").includes(marker));
+    trustedCreator(issue) && !issue.pull_request && typeof issue.body === "string" && issue.body.split("\n").includes(marker));
   const checkedIssue = (issue) => {
-    if (!Number.isSafeInteger(issue?.number) || issue.number <= 0 ||
+    if (!trustedCreator(issue) || !Number.isSafeInteger(issue?.number) || issue.number <= 0 ||
         !["open", "closed"].includes(issue.state) || !Array.isArray(issue.assignees)) {
       throw new Error("Unreadable review issue");
     }

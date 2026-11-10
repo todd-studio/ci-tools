@@ -334,7 +334,10 @@ new permissions. GitHub may suppress the issue webhook for this token, so discov
 router's assigned-open-issue sweep. Keep all calls serialized in the existing per-PR concurrency
 group with `cancel-in-progress: false`: the API has no atomic create-if-absent operation. Routing
 reads every page of repository issues directly, including closed work, and matches a stable body
-marker keyed by repository and PR number, never by head SHA. Repeated runs and later heads reuse
+marker keyed by repository and PR number, never by head SHA, only on issues created by the
+GitHub Actions bot's immutable ID and Bot type. A copied marker from another creator is ignored,
+including on closed issues; unrelated issue text never receives assignment through this helper.
+Repeated runs and later heads reuse
 that issue; open work missing metadata or its assignment is repaired, preserving later type and
 priority decisions, and closed work stays closed. A fresh
 PR read immediately before a write refuses a moved or closed request; GitHub cannot atomically
