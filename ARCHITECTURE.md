@@ -37,7 +37,7 @@ flowchart LR
   settings -.-> gate
   settings -.-> dab
   gate -- "reads; posts review/gate" --> gh
-  dab -- "reads; arms auto-merge" --> gh
+  dab -- "reads; arms auto-merge; routes held work" --> gh
 ```
 
 Everything moves in one direction: a consumer reads files from ci-tools, at a commit it chose,
@@ -124,8 +124,14 @@ pass, only when every one of these holds: an open, non-draft pull request by Dep
 account, with exactly one commit, a same-repository head, the default branch as base, and every
 dependency a minor or patch update in an ecosystem listed in `.github/dependabot-auto-merge.json`.
 
-Its boundary: it only requests auto-merge. Required CI and `review/gate` still decide whether the
-merge happens. It arms as the consumer's merge App, so the merge's own `push` CI runs; it never
+With `--route-held`, the same helper instead creates or reuses an agent-assigned GitHub issue
+for a trusted open update that policy holds. The stable source-PR marker survives later heads
+and closed review work only when the immutable creator is the GitHub Actions bot; copied markers
+from other creators are ignored. The existing lane router assignment sweep discovers the work. Consumers
+serialize the calls per PR and use their workflow token with `issues: write` for routing.
+
+Its boundary: it requests auto-merge or routes held review work; it never decides the review.
+Required CI and `review/gate` still decide whether the merge happens. It arms as the consumer's merge App, so the merge's own `push` CI runs; it never
 falls back to the workflow's default token.
 
 ### This repository's own CI and gate
@@ -172,7 +178,8 @@ and an absent required status blocks the merge.
 1. Dependabot opens or updates a pull request; the consumer's `dependabot-auto-merge.yml` runs.
 2. `--clear` withdraws any earlier request, so a new head must earn eligibility again.
 3. `fetch-metadata` describes the update; the script arms auto-merge on that exact head if it is
-   eligible, or prints `Not eligible: left for review`.
+   eligible, or prints `Not eligible: left for review`. The separate `--route-held` call uses
+   the same facts to create or reuse assigned review work for a trusted held update.
 4. GitHub merges once required CI and `review/gate` are green.
 
 ## Integrations and APIs
@@ -180,7 +187,8 @@ and an absent required status blocks the merge.
 - **GitHub REST API**, from `review-gate.mjs`: pull requests, their files, commits and reviews,
   commit-to-pull-request lookups, compares and git trees (read); commit statuses (write).
 - **GitHub CLI**, from `dependabot-auto-merge.mjs`: `gh api` to read the pull request, and
-  `gh pr merge --auto --squash --match-head-commit` or `--disable-auto` to arm or clear.
+  `gh pr merge --auto --squash --match-head-commit` or `--disable-auto` to arm or clear, and
+  repository issue list/create/assignment endpoints to route held updates.
 - **raw.githubusercontent.com**: how consumers fetch every file here. This is why the repository is
   public, and why nothing secret may ever be in it.
 - **GitHub Actions**: `dependabot/fetch-metadata` and `actions/create-github-app-token` in the

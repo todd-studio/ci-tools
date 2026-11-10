@@ -7,6 +7,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  issues: write
 jobs:
   arm:
     if: github.event.pull_request.user.id == 49699333 && github.event.pull_request.user.type == 'Bot'
@@ -30,6 +31,14 @@ jobs:
         uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+      # Keep this in the same per-PR concurrency group as clear and arm.
+      # GITHUB_TOKEN can assign work without any new merge-App permissions;
+      # the router discovers it through the assigned-open-issue sweep.
+      - name: Route held update for agent review
+        run: node dependabot-auto-merge/dependabot-auto-merge.mjs --route-held
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPDATED_DEPENDENCIES: ${{ steps.metadata.outputs.updated-dependencies-json }}
       # An auto-merge is made by whoever armed it, and GitHub starts no workflow
       # for a merge GITHUB_TOKEN armed (plates-web#1685). Arm as the repository's
       # merge app so main's push CI runs. A missing app secret fails red; it never falls

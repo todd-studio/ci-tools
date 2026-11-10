@@ -200,7 +200,8 @@ The consumer's default-branch checkout must contain `.github/dependabot-auto-mer
 
 ```json
 {
-  "ecosystems": ["npm_and_yarn", "github_actions", "uv"]
+  "ecosystems": ["npm_and_yarn", "github_actions", "uv"],
+  "reviewPriorityFieldId": 46102352
 }
 ```
 
@@ -244,6 +245,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  issues: write
 jobs:
   arm:
     if: github.event.pull_request.user.id == 49699333 && github.event.pull_request.user.type == 'Bot'
@@ -277,6 +279,14 @@ jobs:
         uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+      # Keep this in the same per-PR concurrency group as clear and arm.
+      # GITHUB_TOKEN can assign work without any new merge-App permissions;
+      # the router discovers it through the assigned-open-issue sweep.
+      - name: Route held update for agent review
+        run: node "$RUNNER_TEMP/dependabot-auto-merge/dependabot-auto-merge.mjs" --route-held
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPDATED_DEPENDENCIES: ${{ steps.metadata.outputs.updated-dependencies-json }}
       # An auto-merge is made by whoever armed it, and GitHub starts no workflow
       # for a merge GITHUB_TOKEN armed (plates-web#1685). Arm as the repository's
       # merge app so main's push CI runs. A missing app secret fails red; it never falls
@@ -304,7 +314,38 @@ red with no fallback to `GITHUB_TOKEN`; the daily Dependabot backstop can still 
 See [create-github-app-token's permissions](https://github.com/actions/create-github-app-token#inputs)
 and [fetch-metadata's outputs](https://github.com/dependabot/fetch-metadata#outputs).
 
-ci-tools uses the same clear/metadata/App/arm steps, running the script and settings from its own
+`--route-held` is an additive, routing-only call: with fresh metadata and settings it creates or
+reuses an issue assigned to `toddagent01` for an open, non-draft, exact-event-head Dependabot
+update that does not qualify for auto-merge. The same-repository and default-base checks still
+apply; multi-commit updates can receive review. It never arms a merge. The issue links the source
+PR and asks its lane to merge it through normal policy or close it with a reason.
+
+Routing requires `reviewPriorityFieldId` in the existing settings file: it is the organization's
+native Priority field ID (`46102352` for todd-studio), with a `Medium` option. An organization
+operator can obtain it from `gh api orgs/OWNER/issue-fields`; the workflow token needs no
+organization permission. Created work has native type `Maintenance` and native Priority `Medium`,
+verified by a fresh issue read before reporting success. Neither value is duplicated in its body.
+Missing settings or refused/unconfirmed metadata fail the routing step. The setting is optional
+for the existing no-argument arming and `--clear` calls. Other organizations must supply their own
+field ID and enable the Maintenance type.
+
+Use the workflow token with `issues: write` for that step, as shown above; the merge App needs no
+new permissions. GitHub may suppress the issue webhook for this token, so discovery relies on the
+router's assigned-open-issue sweep. Keep all calls serialized in the existing per-PR concurrency
+group with `cancel-in-progress: false`: the API has no atomic create-if-absent operation. Routing
+reads every page of repository issues directly, including closed work, and matches a stable body
+marker keyed by repository and PR number, never by head SHA, only on issues created by the
+GitHub Actions bot's immutable ID and Bot type. A copied marker from another creator is ignored,
+including on closed issues; unrelated issue text never receives assignment through this helper.
+Repeated runs and later heads reuse
+that issue; open work missing metadata or its assignment is repaired, preserving later type and
+priority decisions, and closed work stays closed. A fresh
+PR read immediately before a write refuses a moved or closed request; GitHub cannot atomically
+couple an issue write to a PR head, so a later movement is handled by the lane reviewing the
+current head. Unreadable replies, failed writes or a missing returned assignment fail the job.
+The original no-argument and `--clear` calls retain their behavior.
+
+ci-tools uses the same clear/metadata/route/App/arm steps, running the script and settings from its own
 default-branch checkout rather than fetching itself. No pull-request code is checked out or run;
 changes to this workflow take effect only after merging. Its policy allows `github_actions`.
 Tests run in the required `review gate` CI job, replaying captured GitHub and fetch-metadata replies
