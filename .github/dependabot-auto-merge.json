@@ -1,3 +1,4 @@
 {
-  "ecosystems": ["github_actions"]
+  "ecosystems": ["github_actions"],
+  "reviewPriorityFieldId": 46102352
 }

@@ -17,7 +17,9 @@ function readSettings(path) {
   const settings = JSON.parse(readFileSync(path, "utf8"));
   if (
     !settings || typeof settings !== "object" || Array.isArray(settings) ||
-    Object.keys(settings).some((key) => key !== "ecosystems") ||
+    Object.keys(settings).some((key) => !["ecosystems", "reviewPriorityFieldId"].includes(key)) ||
+    (Object.hasOwn(settings, "reviewPriorityFieldId") &&
+      (!Number.isSafeInteger(settings.reviewPriorityFieldId) || settings.reviewPriorityFieldId <= 0)) ||
     !Array.isArray(settings.ecosystems) || settings.ecosystems.length === 0 ||
     settings.ecosystems.some((id) => typeof id !== "string" || !/^[a-z][a-z0-9_]*$/.test(id))
   ) {
@@ -68,7 +70,10 @@ export function eligibleUpdate(facts) {
 // The caller serializes runs per source PR. Use the repository issues endpoint
 // (not search's delayed index), including closed issues so a later head cannot
 // create a second task after the first lane made its decision.
-function routeHeldPull({ repository, number, expectedHead, gh, stillHeld }) {
+function routeHeldPull({ repository, number, expectedHead, gh, stillHeld, reviewPriorityFieldId }) {
+  if (!Number.isSafeInteger(reviewPriorityFieldId) || reviewPriorityFieldId <= 0) {
+    throw new Error("Held review routing requires reviewPriorityFieldId in settings");
+  }
   const marker = `<!-- ci-tools:dependabot-review ${repository}#${number} -->`;
   const assignee = "toddagent01";
   const pages = gh([
@@ -80,7 +85,7 @@ function routeHeldPull({ repository, number, expectedHead, gh, stillHeld }) {
   if (!Array.isArray(pages) || pages.length === 0 || pages.some((page) => !Array.isArray(page))) {
     throw new Error("Unreadable review issue list");
   }
-  const existing = pages.flat().find((issue) =>
+  let existing = pages.flat().find((issue) =>
     !issue.pull_request && typeof issue.body === "string" && issue.body.split("\n").includes(marker));
   const checkedIssue = (issue) => {
     if (!Number.isSafeInteger(issue?.number) || issue.number <= 0 ||
@@ -89,8 +94,31 @@ function routeHeldPull({ repository, number, expectedHead, gh, stillHeld }) {
     }
     return issue;
   };
+  const priority = (issue) => issue.issue_field_values?.find((field) =>
+    field.issue_field_id === reviewPriorityFieldId && field.issue_field_name === "Priority" &&
+    field.data_type === "single_select" && typeof field.single_select_option?.name === "string");
   if (existing) {
     checkedIssue(existing);
+    // Fill missing metadata after an interrupted write, preserving a lane's
+    // later type or priority decision. Closed work is already a decision.
+    if (existing.state === "open" && (!existing.type?.name || !priority(existing))) {
+      if (!existing.type?.name) {
+        if (!stillHeld()) return "Not routed: pull request changed";
+        gh(["api", `repos/${repository}/issues/${existing.number}`, "--method", "PATCH", "-f", "type=Maintenance"]);
+      }
+      if (!priority(existing)) {
+        if (!stillHeld()) return "Not routed: pull request changed";
+        // POST adds this value without replacing other native issue fields.
+        gh([
+          "api", `repos/${repository}/issues/${existing.number}/issue-field-values`, "--method", "POST",
+          "-F", `issue_field_values[][field_id]=${reviewPriorityFieldId}`,
+          "-f", "issue_field_values[][value]=Medium",
+        ]);
+      }
+      const repaired = checkedIssue(JSON.parse(gh(["api", `repos/${repository}/issues/${existing.number}`])));
+      if (!repaired.type?.name || !priority(repaired)) throw new Error("Review issue metadata was not applied");
+      existing = repaired;
+    }
     if (existing.state === "open" && !existing.assignees.some((user) => user.login === assignee)) {
       if (!stillHeld()) return "Not routed: pull request changed";
       const assigned = checkedIssue(JSON.parse(gh([
@@ -105,14 +133,22 @@ function routeHeldPull({ repository, number, expectedHead, gh, stillHeld }) {
   }
   if (!stillHeld()) return "Not routed: pull request changed";
   const source = `https://github.com/${repository}/pull/${number}`;
-  const body = `${marker}\n\n## Problem and effect\n\nDependabot update [${repository} PR ${number}](${source}) was held by the shared auto-merge policy at head ${expectedHead}. It needs an agent decision.\n\n## Outcome\n\nReview the source pull request's current head, update compatibility and required checks. Merge it through the repository's normal policy, or close it with a reason on the source PR. Do not loosen auto-merge eligibility or bypass required checks.\n\n## Proof\n\nLink the merged source PR and passing checks, or the closed source PR and its reason. Close this review issue only after that evidence exists.\n\n## Routing\n\nPriority: normal. No known blockers. This issue is the review work for this source PR across all later heads; reuse it rather than filing another.\n`;
+  const body = `${marker}\n\n## Problem and effect\n\nDependabot update [${repository} PR ${number}](${source}) was held by the shared auto-merge policy at head ${expectedHead}. It needs an agent decision.\n\n## Outcome\n\nReview the source pull request's current head, update compatibility and required checks. Merge it through the repository's normal policy, or close it with a reason on the source PR. Do not loosen auto-merge eligibility or bypass required checks.\n\n## Proof\n\nLink the merged source PR and passing checks, or the closed source PR and its reason. Close this review issue only after that evidence exists.\n\n## Routing\n\nNo known blockers. This issue is the review work for this source PR across all later heads; reuse it rather than filing another.\n`;
   const created = checkedIssue(JSON.parse(gh([
     "api", `repos/${repository}/issues`, "--method", "POST",
     "-f", `title=Review held Dependabot update: ${repository} PR ${number}`,
     "-f", `body=${body}`, "-f", `assignees[]=${assignee}`,
+    "-f", "type=Maintenance",
+    "-F", `issue_field_values[][field_id]=${reviewPriorityFieldId}`,
+    "-f", "issue_field_values[][value]=Medium",
   ])));
   if (created.state !== "open" || !created.assignees.some((user) => user.login === assignee)) {
     throw new Error("Review issue was not created open and assigned");
+  }
+  const verified = checkedIssue(JSON.parse(gh(["api", `repos/${repository}/issues/${created.number}`])));
+  if (verified.state !== "open" || !verified.assignees.some((user) => user.login === assignee) ||
+      verified.type?.name !== "Maintenance" || priority(verified)?.single_select_option.name !== "Medium") {
+    throw new Error("Review issue metadata or assignment was not applied");
   }
   return `Review work created: ${repository} issue ${created.number}`;
 }
@@ -136,7 +172,7 @@ export function armAutoMerge({
     }
     return "Prior auto-merge cleared; eligibility must be verified again";
   }
-  const { ecosystems } = readSettings(settingsPath);
+  const { ecosystems, reviewPriorityFieldId } = readSettings(settingsPath);
   const expectedHead = event.pull_request.head.sha;
   const facts = {
     pullRequest, expectedHead, repositoryId: event.repository.id,
@@ -145,7 +181,7 @@ export function armAutoMerge({
   if (shouldRouteHeld) {
     if (!trustedOpenPull(facts) || eligibleUpdate(facts)) return "Not routed: no held trusted update";
     return routeHeldPull({
-      repository, number, expectedHead, gh,
+      repository, number, expectedHead, gh, reviewPriorityFieldId,
       stillHeld: () => {
         const fresh = { ...facts, pullRequest: JSON.parse(gh(["api", `repos/${repository}/pulls/${number}`])) };
         return trustedOpenPull(fresh) && !eligibleUpdate(fresh);

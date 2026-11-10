@@ -143,11 +143,14 @@ test('the standalone CLI runs through a symlink, reads cwd settings, and clear i
 });
 
 test('held updates create complete assigned review work and reuse it across runs and heads', (t) => {
-  const { settingsPath } = setup(t);
+  const { settingsPath, settings } = setup(t);
+  settings({ ecosystems: ['npm_and_yarn'], reviewPriorityFieldId: 46102352 });
   const captured = readFixture('dependabot-auto-merge/held-pull.json');
   const capturedIssue = readFixture('dependabot-auto-merge/held-issue.json');
+  const capturedMetadata = readFixture('dependabot-auto-merge/held-metadata.json');
   // Replay WS 5680 while open; issue writes replay CI 47 with the submitted
-  // routing body. Deliberate state/head edits below exercise the trust boundary.
+  // routing body and CI 49's workflow-token metadata. Deliberate state/head edits
+  // below exercise the trust boundary.
   let current = { ...captured, state: 'open' };
   let currentEvent = {
     repository: { id: captured.base.repo.id, full_name: 'todd-studio/workstation', default_branch: 'main' },
@@ -158,6 +161,7 @@ test('held updates create complete assigned review work and reuse it across runs
   let writes = 0;
   let listReply;
   let beforeWrite;
+  let omitMetadataReadback = false;
   const run = () => armAutoMerge({
     event: currentEvent, dependencies, settingsPath, shouldRouteHeld: true,
     gh: (args) => {
@@ -167,19 +171,37 @@ test('held updates create complete assigned review work and reuse it across runs
         beforeWrite?.();
         return listReply ?? [[], issues].map((page) => JSON.stringify(page)).join('\n');
       }
+      if (!args.includes('--method')) {
+        return JSON.stringify(omitMetadataReadback ? { ...issues[0], issue_field_values: [] } : issues[0]);
+      }
+      if (args[args.indexOf('--method') + 1] === 'PATCH') {
+        writes++;
+        issues[0] = { ...issues[0], type: capturedMetadata.type };
+        return JSON.stringify(issues[0]);
+      }
       assert.equal(args[args.indexOf('--method') + 1], 'POST');
       writes++;
       if (args[1].endsWith('/assignees')) {
         issues[0] = { ...issues[0], assignees: capturedIssue.assignees };
         return JSON.stringify(issues[0]);
       }
+      if (args[1].endsWith('/issue-field-values')) {
+        assert.ok(args.includes('issue_field_values[][field_id]=46102352'));
+        assert.ok(args.includes('issue_field_values[][value]=Medium'));
+        issues[0].issue_field_values = capturedMetadata.issue_field_values;
+        return JSON.stringify(issues[0].issue_field_values);
+      }
       const body = args.find((arg) => arg.startsWith('body=')).slice(5);
       assert.ok(args.includes('assignees[]=toddagent01'));
+      assert.ok(args.includes('type=Maintenance'));
+      assert.ok(args.includes('issue_field_values[][field_id]=46102352'));
+      assert.ok(args.includes('issue_field_values[][value]=Medium'));
+      assert.doesNotMatch(body, /Priority:/);
       assert.match(body, /https:\/\/github.com\/todd-studio\/workstation\/pull\/5680/);
       assert.match(body, /Merge it.*or close it with a reason/);
       assert.match(body, /## Proof/);
       assert.match(body, new RegExp(current.head.sha));
-      issues.push({ ...capturedIssue, body });
+      issues.push({ ...capturedIssue, ...capturedMetadata, body });
       return JSON.stringify(issues[0]);
     },
   });
@@ -219,4 +241,18 @@ test('held updates create complete assigned review work and reuse it across runs
   beforeWrite = () => { current = { ...trusted, state: 'closed' }; };
   assert.match(run(), /Not routed: pull request changed/);
   assert.equal(writes, 2);
+  current = trusted;
+  beforeWrite = undefined;
+  issues = [];
+  omitMetadataReadback = true;
+  assert.throws(run, /Review issue metadata or assignment was not applied/,
+    'a successful create reply is insufficient when fresh native-field readback disagrees');
+  omitMetadataReadback = false;
+  issues[0].issue_field_values = [];
+  delete issues[0].type;
+  assert.match(run(), /Review work reused/);
+  assert.equal(issues[0].type.name, 'Maintenance');
+  assert.equal(issues[0].issue_field_values[0].single_select_option.name, 'Medium');
+  settings({ ecosystems: ['npm_and_yarn'] });
+  assert.throws(run, /requires reviewPriorityFieldId/);
 });

@@ -200,7 +200,8 @@ The consumer's default-branch checkout must contain `.github/dependabot-auto-mer
 
 ```json
 {
-  "ecosystems": ["npm_and_yarn", "github_actions", "uv"]
+  "ecosystems": ["npm_and_yarn", "github_actions", "uv"],
+  "reviewPriorityFieldId": 46102352
 }
 ```
 
@@ -319,13 +320,23 @@ update that does not qualify for auto-merge. The same-repository and default-bas
 apply; multi-commit updates can receive review. It never arms a merge. The issue links the source
 PR and asks its lane to merge it through normal policy or close it with a reason.
 
+Routing requires `reviewPriorityFieldId` in the existing settings file: it is the organization's
+native Priority field ID (`46102352` for todd-studio), with a `Medium` option. An organization
+operator can obtain it from `gh api orgs/OWNER/issue-fields`; the workflow token needs no
+organization permission. Created work has native type `Maintenance` and native Priority `Medium`,
+verified by a fresh issue read before reporting success. Neither value is duplicated in its body.
+Missing settings or refused/unconfirmed metadata fail the routing step. The setting is optional
+for the existing no-argument arming and `--clear` calls. Other organizations must supply their own
+field ID and enable the Maintenance type.
+
 Use the workflow token with `issues: write` for that step, as shown above; the merge App needs no
 new permissions. GitHub may suppress the issue webhook for this token, so discovery relies on the
 router's assigned-open-issue sweep. Keep all calls serialized in the existing per-PR concurrency
 group with `cancel-in-progress: false`: the API has no atomic create-if-absent operation. Routing
 reads every page of repository issues directly, including closed work, and matches a stable body
 marker keyed by repository and PR number, never by head SHA. Repeated runs and later heads reuse
-that issue; open work missing its assignment is reassigned, and closed work stays closed. A fresh
+that issue; open work missing metadata or its assignment is repaired, preserving later type and
+priority decisions, and closed work stays closed. A fresh
 PR read immediately before a write refuses a moved or closed request; GitHub cannot atomically
 couple an issue write to a PR head, so a later movement is handled by the lane reviewing the
 current head. Unreadable replies, failed writes or a missing returned assignment fail the job.
