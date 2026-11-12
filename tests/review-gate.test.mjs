@@ -360,6 +360,27 @@ const reviewWake = (head = HEAD) => ({
   },
 });
 
+test('a transient 503 or network error is retried and the evaluation completes', async (t) => {
+  runtimeEnv(t, pullEvent());
+  const { statuses, calls } = stubFetch({ lane: 'ordinary' });
+  const inner = globalThis.fetch;
+  let pullReads = 0;
+  globalThis.fetch = async (url, init) => {
+    if (String(url).endsWith('/repos/o/r/pulls/1')) {
+      pullReads += 1;
+      if (pullReads === 1) throw new TypeError('fetch failed');
+      if (pullReads === 2) return { ok: false, status: 503, json: async () => ({}), text: async () => 'Service Unavailable' };
+    }
+    return inner(url, init);
+  };
+  await main({ retryDelays: [0, 0, 0] });
+  assert.deepEqual(
+    statuses.map(({ state }) => state),
+    ['pending', 'success'],
+  );
+  assert.equal(pullReads, 3);
+});
+
 test('ordinary succeeds without any reviewer or CodeRabbit read', async (t) => {
   runtimeEnv(t, pullEvent());
   const { statuses, calls } = stubFetch({ lane: 'ordinary' });
@@ -601,14 +622,18 @@ test('a dismissal naming this exact head blocks the carry, even with an eligible
   assert.match(statuses.at(-1).description, /no reviewer verdict names head/);
 });
 
-test('unreadable review evidence leaves pending', async (t) => {
+test('a persistently unreadable review inventory fails the job, never green', async (t) => {
   runtimeEnv(t, pullEvent());
-  const { statuses } = stubFetch({ reviewStatus: 503 });
-  await main();
+  const { statuses, calls } = stubFetch({ reviewStatus: 503 });
+  await main({ retryDelays: [0, 0, 0] }).then(
+    () => assert.fail('the job must fail'),
+    (error) => assert.match(error.message, /pulls\/1\/reviews.*503.*after 4 attempts/),
+  );
   assert.deepEqual(
     statuses.map(({ state }) => state),
     ['pending'],
   );
+  assert.equal(calls.filter(([path]) => path.includes('/pulls/1/reviews')).length, 4);
 });
 
 test('a malformed newer review leaves pending, never a stale green', async (t) => {
