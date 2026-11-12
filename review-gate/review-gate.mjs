@@ -276,7 +276,8 @@ export async function carriedApproval({ compare, tree, repository, head, reviews
   }
 }
 
-export async function main() {
+// retryDelays is a seam for tests; the workflow runs the defaults.
+export async function main({ retryDelays = [1_000, 2_000, 4_000] } = {}) {
   const token = process.env.GITHUB_TOKEN;
   const repository = process.env.GITHUB_REPOSITORY;
   const runId = Number(process.env.GITHUB_RUN_ID);
@@ -307,20 +308,39 @@ export async function main() {
   let pullRequestNumber = event.pull_request?.number;
   const eventHead = event.pull_request?.head?.sha ?? (reviewWake ? event.workflow_run.head_sha : undefined);
 
+  // A 5xx or a network error is retried after each of retryDelays (#51): one
+  // flaky answer must not leave the status pending. Once they run out the
+  // error is thrown, failing the job with the status never past pending. Any
+  // other non-2xx is an answer, not a blip, and throws at once. Re-sending a
+  // status POST is safe: it only repeats the same state on the same head.
   const api = async (path, init = {}) => {
-    const response = await fetch(`https://api.github.com${path}`, {
-      ...init,
-      headers: {
-        authorization: `Bearer ${token}`,
-        accept: 'application/vnd.github+json',
-        'content-type': 'application/json',
-        ...init.headers,
-      },
-    });
-    if (!response.ok) {
-      throw new Error(`GitHub ${init.method ?? 'GET'} ${path}: ${response.status} ${await response.text()}`);
+    const request = `GitHub ${init.method ?? 'GET'} ${path}`;
+    for (let attempt = 0; ; attempt += 1) {
+      let failure;
+      try {
+        const response = await fetch(`https://api.github.com${path}`, {
+          ...init,
+          headers: {
+            authorization: `Bearer ${token}`,
+            accept: 'application/vnd.github+json',
+            'content-type': 'application/json',
+            ...init.headers,
+          },
+        });
+        if (response.ok) return await response.json();
+        failure = new Error(`${request}: ${response.status} ${await response.text()}`);
+        if (response.status < 500) throw failure;
+      } catch (error) {
+        // fetch rejects, and a body cut off mid-read rejects, with a TypeError.
+        if (error === failure || !(error instanceof TypeError)) throw error;
+        failure = new Error(`${request}: ${error.message}`);
+      }
+      if (attempt >= retryDelays.length) {
+        throw new Error(`${failure.message} (after ${attempt + 1} attempts)`);
+      }
+      console.log(`review-gate: ${failure.message.split('\n')[0].slice(0, 200)} — retrying in ${retryDelays[attempt]} ms`);
+      await new Promise((resolve) => setTimeout(resolve, retryDelays[attempt]));
     }
-    return response.json();
   };
   const paged = async (path) => {
     const all = [];
@@ -440,13 +460,8 @@ export async function main() {
 
   if (await settledAsDependabot()) return;
 
-  let reviews;
-  try {
-    reviews = await paged(`/repos/${repository}/pulls/${pullRequestNumber}/reviews`);
-  } catch (error) {
-    console.log(`review-gate: reviewer inventory is unreadable (${error.message}) — pending stands`);
-    return;
-  }
+  // Unreadable after retries throws: pending stands and the job fails visibly.
+  const reviews = await paged(`/repos/${repository}/pulls/${pullRequestNumber}/reviews`);
   if (await headMoved()) {
     console.log(`review-gate: head moved while reviews were read — not publishing on ${head.slice(0, 8)}`);
     return;

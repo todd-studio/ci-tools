@@ -18,7 +18,9 @@ than guess. It posts pending as soon as it starts, then stops without a verdict 
   head;
 - a reply from GitHub has a shape the gate does not recognise, such as an unknown review state
   from `toddreviewer01`;
-- a GitHub API call failed outright, which also fails the **Review gate** run itself.
+- a GitHub API call failed outright, which also fails the **Review gate** run itself. The gate
+  retries a GitHub 5xx or a network error three times over about seven seconds first, so one
+  flaky answer no longer stops it; a failure that outlasts the retries fails the run.
 
 The check is missing altogether, with no pending, when the run failed before the gate started:
 the project has no `scripts/review-gate.pin` on its default branch, or the pinned gate files could
