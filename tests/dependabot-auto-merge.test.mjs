@@ -148,6 +148,7 @@ test('held updates create complete assigned review work and reuse it across runs
   const captured = readFixture('dependabot-auto-merge/held-pull.json');
   const capturedIssue = readFixture('dependabot-auto-merge/held-issue.json');
   const capturedMetadata = readFixture('dependabot-auto-merge/held-metadata.json');
+  const capturedTimeline = readFixture('dependabot-auto-merge/held-timeline.json');
   // Replay WS 5680 while open; issue writes replay CI 47 with the submitted
   // routing body and CI 49's workflow-token metadata. Deliberate state/head edits
   // below exercise the trust boundary.
@@ -168,13 +169,18 @@ test('held updates create complete assigned review work and reuse it across runs
       assert.equal(args[0], 'api', 'routing must never arm a merge');
       if (args[1].includes('/pulls/')) return JSON.stringify(current);
       if (args.includes('--paginate')) {
-        // The list is bounded server-side; this fake ignores the filter, so the
-        // spoof cases below still prove the client-side creator check.
-        const query = new URL(args[1], 'https://api.github.com/').searchParams;
-        assert.equal(query.get('creator'), 'github-actions[bot]');
-        assert.equal(query.get('since'), captured.created_at);
+        assert.equal(args[1], 'repos/todd-studio/workstation/issues/5680/timeline?per_page=100',
+          'the lookup reads only the source PR timeline, never the repository issue history');
         beforeWrite?.();
-        return listReply ?? [[], issues].map((page) => JSON.stringify(page)).join('\n');
+        if (listReply) return listReply;
+        // GitHub cross-references each issue whose body links the PR, beside its
+        // other references (the captured ones); gh applies the script's filter.
+        const linking = issues.filter((issue) => /\/todd-studio\/workstation\/pull\/5680\b/.test(issue.body ?? ''));
+        const timeline = [...capturedTimeline, ...linking.map((issue) => ({ ...capturedTimeline[0], source: {
+          ...capturedTimeline[0].source,
+          issue: { repository_url: 'https://api.github.com/repos/todd-studio/workstation', ...issue },
+        } }))];
+        return execFileSync('jq', ['-r', args[args.indexOf('--jq') + 1]], { input: JSON.stringify(timeline), encoding: 'utf8' });
       }
       if (!args.includes('--method')) {
         return JSON.stringify(omitMetadataReadback ? { ...issues.at(-1), issue_field_values: [] } : issues.at(-1));
@@ -263,17 +269,19 @@ test('held updates create complete assigned review work and reuse it across runs
   settings({ ecosystems: ['npm_and_yarn'], reviewPriorityFieldId: 46102352 });
   const genuine = structuredClone(issues[0]);
   // A public marker authenticates nothing. Replay a real non-workflow creator,
-  // including a spoof that copies the bot's login, ID or type individually.
-  for (const user of [
-    capturedIssue.user,
-    { ...capturedIssue.user, login: capturedMetadata.user.login },
-    { ...capturedIssue.user, id: capturedMetadata.user.id },
-    { ...capturedMetadata.user, id: capturedIssue.user.id },
-    undefined,
+  // including a spoof that copies the bot's login, ID or type individually, and
+  // the same bot creating the issue from another repository's workflow.
+  for (const forged of [
+    { user: capturedIssue.user },
+    { user: { ...capturedIssue.user, login: capturedMetadata.user.login } },
+    { user: { ...capturedIssue.user, id: capturedMetadata.user.id } },
+    { user: { ...capturedMetadata.user, id: capturedIssue.user.id } },
+    { user: undefined },
+    { repository_url: capturedTimeline[1].source.issue.repository_url },
   ]) {
     for (const state of ['open', 'closed']) {
-      const spoof = { ...genuine, number: capturedIssue.number, user, state, assignees: [],
-        body: genuine.body.split('\n')[0] + '\nUnrelated opener-controlled text' };
+      const spoof = { ...genuine, number: capturedIssue.number, state, assignees: [], ...forged,
+        body: `${genuine.body.split('\n')[0]}\nUnrelated opener-controlled text about https://github.com/todd-studio/workstation/pull/5680` };
       issues = [structuredClone(spoof)];
       const before = writes;
       assert.match(run(), /Review work created/, 'ignore open and closed marker spoofs');

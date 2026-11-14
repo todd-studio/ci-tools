@@ -67,10 +67,10 @@ export function eligibleUpdate(facts) {
   );
 }
 
-// The caller serializes runs per source PR. Use the repository issues endpoint
+// The caller serializes runs per source PR. Read the source PR's own timeline
 // (not search's delayed index), including closed issues so a later head cannot
 // create a second task after the first lane made its decision.
-function routeHeldPull({ repository, number, expectedHead, pullCreatedAt, gh, stillHeld, reviewPriorityFieldId }) {
+function routeHeldPull({ repository, number, expectedHead, gh, stillHeld, reviewPriorityFieldId }) {
   if (!Number.isSafeInteger(reviewPriorityFieldId) || reviewPriorityFieldId <= 0) {
     throw new Error("Held review routing requires reviewPriorityFieldId in settings");
   }
@@ -79,24 +79,26 @@ function routeHeldPull({ repository, number, expectedHead, pullCreatedAt, gh, st
   // The marker is public and copyable. Only this immutable GitHub Actions
   // creator identity proves workflow-owned work, including closed decisions.
   const workflowBotId = 41898282;
-  const workflowBotLogin = "github-actions[bot]";
   const trustedCreator = (issue) => issue?.user?.id === workflowBotId && issue.user.type === "Bot";
-  // Bound the scan without trusting it: review work for this PR is created by
-  // the bot after the PR opened, so `creator` and `since` (updated at or after)
-  // cannot drop it, and the list stays small however long the issue history
-  // grows. GitHub refuses a missing or malformed time (HTTP 422), failing the
-  // run before any write. The checks below still authenticate what it returns.
+  // Every repository's workflows share that bot identity, so the issue must
+  // also live here. GitHub's own URLs may differ from the event's name in case.
+  const repositoryUrl = `https://api.github.com/repos/${repository}`.toLowerCase();
+  // The review issue's body links the source PR, so GitHub records a
+  // cross-reference on that PR's timeline (seen 1-2 s after creation; the
+  // per-PR serialization keeps the next run later than that), rendering the
+  // issue's current state. The lookup grows with this PR's own activity, never
+  // with the repository's issue history.
   const pages = gh([
-    "api", `repos/${repository}/issues?state=all&creator=${encodeURIComponent(workflowBotLogin)}&since=${pullCreatedAt}&per_page=100`, "--paginate",
-    // Filter before gh returns the body: a large repository's issue history
-    // otherwise exceeds execFileSync's output buffer. JSON quoting is jq-safe.
-    "--jq", `[.[] | select(.pull_request == null and .user.id == ${workflowBotId} and .user.type == "Bot" and ((.body // "" | split("\\n") | index(${JSON.stringify(marker)})) != null))] | @json`,
+    "api", `repos/${repository}/issues/${number}/timeline?per_page=100`, "--paginate",
+    // Filter before gh returns bodies; JSON quoting is jq-safe.
+    "--jq", `[.[] | select(.event == "cross-referenced") | .source.issue | select(. != null and .pull_request == null and ((.repository_url // "") | ascii_downcase) == ${JSON.stringify(repositoryUrl)} and .user.id == ${workflowBotId} and .user.type == "Bot" and ((.body // "" | split("\\n") | index(${JSON.stringify(marker)})) != null))] | @json`,
   ]).trim().split("\n").map((page) => JSON.parse(page));
   if (!Array.isArray(pages) || pages.length === 0 || pages.some((page) => !Array.isArray(page))) {
     throw new Error("Unreadable review issue list");
   }
   let existing = pages.flat().find((issue) =>
-    trustedCreator(issue) && !issue.pull_request && typeof issue.body === "string" && issue.body.split("\n").includes(marker));
+    trustedCreator(issue) && !issue.pull_request && issue.repository_url?.toLowerCase() === repositoryUrl &&
+    typeof issue.body === "string" && issue.body.split("\n").includes(marker));
   const checkedIssue = (issue) => {
     if (!trustedCreator(issue) || !Number.isSafeInteger(issue?.number) || issue.number <= 0 ||
         !["open", "closed"].includes(issue.state) || !Array.isArray(issue.assignees)) {
@@ -192,7 +194,6 @@ export function armAutoMerge({
     if (!trustedOpenPull(facts) || eligibleUpdate(facts)) return "Not routed: no held trusted update";
     return routeHeldPull({
       repository, number, expectedHead, gh, reviewPriorityFieldId,
-      pullCreatedAt: pullRequest.created_at,
       stillHeld: () => {
         const fresh = { ...facts, pullRequest: JSON.parse(gh(["api", `repos/${repository}/pulls/${number}`])) };
         return trustedOpenPull(fresh) && !eligibleUpdate(fresh);

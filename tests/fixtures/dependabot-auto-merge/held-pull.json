@@ -1,9 +1,8 @@
 {
-  "source": "gh api repos/todd-studio/workstation/pulls/5680 \u2014 captured 2026-11-10 on toddagent02@mac-main; trimmed to routing fields; created_at read 2026-11-14 for the bounded issue lookup",
+  "source": "gh api repos/todd-studio/workstation/pulls/5680 \u2014 captured 2026-11-10 on toddagent02@mac-main; trimmed to routing fields",
   "reply": {
     "number": 5680,
     "state": "closed",
-    "created_at": "2026-11-06T08:15:08Z",
     "draft": false,
     "user": {
       "id": 49699333,
