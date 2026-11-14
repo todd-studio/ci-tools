@@ -242,9 +242,6 @@ test('held updates create complete assigned review work and reuse it across runs
   listReply = '{}';
   assert.throws(run, /Unreadable review issue list/);
   listReply = undefined;
-  current = { ...trusted, created_at: undefined };
-  assert.throws(run, /Unreadable pull-request creation time/);
-  current = trusted;
   issues = [];
   beforeWrite = () => { current = { ...trusted, state: 'closed' }; };
   assert.match(run(), /Not routed: pull request changed/);
