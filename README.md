@@ -335,7 +335,10 @@ router's assigned-open-issue sweep. Keep all calls serialized in the existing pe
 group with `cancel-in-progress: false`: the API has no atomic create-if-absent operation. Routing
 reads the source PR's own timeline, where GitHub cross-references the review issue because its
 body links the PR, so the lookup grows with that PR's activity, never with the repository's issue
-history. It sees closed work too, and matches a stable body
+history. That cross-reference appears a moment after the create, and no GitHub issue read is
+immediately consistent, so a create reports success only once the timeline shows the new issue
+and otherwise fails the step after about 30 seconds; a run interrupted inside that window and
+rerun at once can still file a second issue. It sees closed work too, and matches a stable body
 marker keyed by repository and PR number, never by head SHA, only on issues in this repository
 created by the GitHub Actions bot's immutable ID and Bot type. A copied marker from another
 creator, or from the same bot in another repository, is ignored,

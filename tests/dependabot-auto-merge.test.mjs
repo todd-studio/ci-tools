@@ -163,8 +163,12 @@ test('held updates create complete assigned review work and reuse it across runs
   let listReply;
   let beforeWrite;
   let omitMetadataReadback = false;
+  // GitHub publishes a new issue's cross-reference after the create returns.
+  let publishLag = 0;
+  let unpublishedReads = 0;
+  let sleeps = 0;
   const run = () => armAutoMerge({
-    event: currentEvent, dependencies, settingsPath, shouldRouteHeld: true,
+    event: currentEvent, dependencies, settingsPath, shouldRouteHeld: true, sleep: () => { sleeps++; },
     gh: (args) => {
       assert.equal(args[0], 'api', 'routing must never arm a merge');
       if (args[1].includes('/pulls/')) return JSON.stringify(current);
@@ -175,7 +179,9 @@ test('held updates create complete assigned review work and reuse it across runs
         if (listReply) return listReply;
         // GitHub cross-references each issue whose body links the PR, beside its
         // other references (the captured ones); gh applies the script's filter.
-        const linking = issues.filter((issue) => /\/todd-studio\/workstation\/pull\/5680\b/.test(issue.body ?? ''));
+        const published = unpublishedReads > 0 ? issues.slice(0, -1) : issues;
+        unpublishedReads = Math.max(unpublishedReads - 1, 0);
+        const linking = published.filter((issue) => /\/todd-studio\/workstation\/pull\/5680\b/.test(issue.body ?? ''));
         const timeline = [...capturedTimeline, ...linking.map((issue) => ({ ...capturedTimeline[0], source: {
           ...capturedTimeline[0].source,
           issue: { repository_url: 'https://api.github.com/repos/todd-studio/workstation', ...issue },
@@ -213,10 +219,14 @@ test('held updates create complete assigned review work and reuse it across runs
       assert.match(body, /## Proof/);
       assert.match(body, new RegExp(current.head.sha));
       issues.push({ ...capturedIssue, ...capturedMetadata, body });
+      unpublishedReads = publishLag;
       return JSON.stringify(issues.at(-1));
     },
   });
+  publishLag = 2;
   assert.match(run(), /Review work created/);
+  assert.equal(sleeps, 2, 'success waits until the next run can find the issue');
+  publishLag = 0;
   assert.match(run(), /Review work reused/);
   current = { ...current, head: { ...current.head, sha: 'a'.repeat(40) } };
   currentEvent = { ...currentEvent, pull_request: current };
@@ -254,6 +264,11 @@ test('held updates create complete assigned review work and reuse it across runs
   assert.equal(writes, 2);
   current = trusted;
   beforeWrite = undefined;
+  issues = [];
+  publishLag = Infinity;
+  assert.throws(run, /Review issue \d+ is not yet on the source PR timeline/,
+    'a create the next run cannot find yet fails red rather than reporting success');
+  publishLag = 0;
   issues = [];
   omitMetadataReadback = true;
   assert.throws(run, /Review issue metadata or assignment was not applied/,

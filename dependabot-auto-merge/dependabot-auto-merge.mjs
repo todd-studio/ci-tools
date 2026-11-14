@@ -67,10 +67,9 @@ export function eligibleUpdate(facts) {
   );
 }
 
-// The caller serializes runs per source PR. Read the source PR's own timeline
-// (not search's delayed index), including closed issues so a later head cannot
-// create a second task after the first lane made its decision.
-function routeHeldPull({ repository, number, expectedHead, gh, stillHeld, reviewPriorityFieldId }) {
+// The caller serializes runs per source PR. Include closed issues so a later
+// head cannot create a second task after the first lane made its decision.
+function routeHeldPull({ repository, number, expectedHead, gh, sleep, stillHeld, reviewPriorityFieldId }) {
   if (!Number.isSafeInteger(reviewPriorityFieldId) || reviewPriorityFieldId <= 0) {
     throw new Error("Held review routing requires reviewPriorityFieldId in settings");
   }
@@ -83,22 +82,24 @@ function routeHeldPull({ repository, number, expectedHead, gh, stillHeld, review
   // Every repository's workflows share that bot identity, so the issue must
   // also live here. GitHub's own URLs may differ from the event's name in case.
   const repositoryUrl = `https://api.github.com/repos/${repository}`.toLowerCase();
-  // The review issue's body links the source PR, so GitHub records a
-  // cross-reference on that PR's timeline (seen 1-2 s after creation; the
-  // per-PR serialization keeps the next run later than that), rendering the
-  // issue's current state. The lookup grows with this PR's own activity, never
-  // with the repository's issue history.
-  const pages = gh([
-    "api", `repos/${repository}/issues/${number}/timeline?per_page=100`, "--paginate",
-    // Filter before gh returns bodies; JSON quoting is jq-safe.
-    "--jq", `[.[] | select(.event == "cross-referenced") | .source.issue | select(. != null and .pull_request == null and ((.repository_url // "") | ascii_downcase) == ${JSON.stringify(repositoryUrl)} and .user.id == ${workflowBotId} and .user.type == "Bot" and ((.body // "" | split("\\n") | index(${JSON.stringify(marker)})) != null))] | @json`,
-  ]).trim().split("\n").map((page) => JSON.parse(page));
-  if (!Array.isArray(pages) || pages.length === 0 || pages.some((page) => !Array.isArray(page))) {
-    throw new Error("Unreadable review issue list");
-  }
-  let existing = pages.flat().find((issue) =>
+  const isReviewIssue = (issue) =>
     trustedCreator(issue) && !issue.pull_request && issue.repository_url?.toLowerCase() === repositoryUrl &&
-    typeof issue.body === "string" && issue.body.split("\n").includes(marker));
+    typeof issue.body === "string" && issue.body.split("\n").includes(marker);
+  // The review issue's body links the source PR, so GitHub cross-references it
+  // on that PR's timeline, rendering its current state. The read grows only with
+  // this PR's own activity, never with the repository's issue history.
+  const reviewIssues = () => {
+    const pages = gh([
+      "api", `repos/${repository}/issues/${number}/timeline?per_page=100`, "--paginate",
+      // Filter before gh returns bodies; JSON quoting is jq-safe.
+      "--jq", `[.[] | select(.event == "cross-referenced") | .source.issue | select(. != null and .pull_request == null and ((.repository_url // "") | ascii_downcase) == ${JSON.stringify(repositoryUrl)} and .user.id == ${workflowBotId} and .user.type == "Bot" and ((.body // "" | split("\\n") | index(${JSON.stringify(marker)})) != null))] | @json`,
+    ]).trim().split("\n").map((page) => JSON.parse(page));
+    if (!Array.isArray(pages) || pages.length === 0 || pages.some((page) => !Array.isArray(page))) {
+      throw new Error("Unreadable review issue list");
+    }
+    return pages.flat().filter(isReviewIssue);
+  };
+  let existing = reviewIssues()[0];
   const checkedIssue = (issue) => {
     if (!trustedCreator(issue) || !Number.isSafeInteger(issue?.number) || issue.number <= 0 ||
         !["open", "closed"].includes(issue.state) || !Array.isArray(issue.assignees)) {
@@ -162,11 +163,20 @@ function routeHeldPull({ repository, number, expectedHead, gh, stillHeld, review
       verified.type?.name !== "Maintenance" || priority(verified)?.single_select_option.name !== "Medium") {
     throw new Error("Review issue metadata or assignment was not applied");
   }
+  // Timeline publication is asynchronous (0-2 s when measured; GitHub's issue
+  // lists lag too, so no read is immediately consistent). Report success only
+  // once the next run's lookup sees this issue, else fail red: a rerun before
+  // then would file a duplicate.
+  for (let attempt = 1; !reviewIssues().some((issue) => issue.number === created.number); attempt++) {
+    if (attempt === 15) throw new Error(`Review issue ${created.number} is not yet on the source PR timeline`);
+    sleep(2000);
+  }
   return `Review work created: ${repository} issue ${created.number}`;
 }
 
 export function armAutoMerge({
   event, dependencies, gh, shouldClear = false, shouldRouteHeld = false,
+  sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms),
   settingsPath = ".github/dependabot-auto-merge.json",
 }) {
   const repository = event.repository.full_name;
@@ -193,7 +203,7 @@ export function armAutoMerge({
   if (shouldRouteHeld) {
     if (!trustedOpenPull(facts) || eligibleUpdate(facts)) return "Not routed: no held trusted update";
     return routeHeldPull({
-      repository, number, expectedHead, gh, reviewPriorityFieldId,
+      repository, number, expectedHead, gh, sleep, reviewPriorityFieldId,
       stillHeld: () => {
         const fresh = { ...facts, pullRequest: JSON.parse(gh(["api", `repos/${repository}/pulls/${number}`])) };
         return trustedOpenPull(fresh) && !eligibleUpdate(fresh);
