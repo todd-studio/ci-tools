@@ -168,6 +168,11 @@ test('held updates create complete assigned review work and reuse it across runs
       assert.equal(args[0], 'api', 'routing must never arm a merge');
       if (args[1].includes('/pulls/')) return JSON.stringify(current);
       if (args.includes('--paginate')) {
+        // The list is bounded server-side; this fake ignores the filter, so the
+        // spoof cases below still prove the client-side creator check.
+        const query = new URL(args[1], 'https://api.github.com/').searchParams;
+        assert.equal(query.get('creator'), 'github-actions[bot]');
+        assert.equal(query.get('since'), captured.created_at);
         beforeWrite?.();
         return listReply ?? [[], issues].map((page) => JSON.stringify(page)).join('\n');
       }
@@ -237,6 +242,9 @@ test('held updates create complete assigned review work and reuse it across runs
   listReply = '{}';
   assert.throws(run, /Unreadable review issue list/);
   listReply = undefined;
+  current = { ...trusted, created_at: undefined };
+  assert.throws(run, /Unreadable pull-request creation time/);
+  current = trusted;
   issues = [];
   beforeWrite = () => { current = { ...trusted, state: 'closed' }; };
   assert.match(run(), /Not routed: pull request changed/);

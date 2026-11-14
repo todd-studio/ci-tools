@@ -70,9 +70,12 @@ export function eligibleUpdate(facts) {
 // The caller serializes runs per source PR. Use the repository issues endpoint
 // (not search's delayed index), including closed issues so a later head cannot
 // create a second task after the first lane made its decision.
-function routeHeldPull({ repository, number, expectedHead, gh, stillHeld, reviewPriorityFieldId }) {
+function routeHeldPull({ repository, number, expectedHead, pullCreatedAt, gh, stillHeld, reviewPriorityFieldId }) {
   if (!Number.isSafeInteger(reviewPriorityFieldId) || reviewPriorityFieldId <= 0) {
     throw new Error("Held review routing requires reviewPriorityFieldId in settings");
+  }
+  if (!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/.test(pullCreatedAt ?? "")) {
+    throw new Error("Unreadable pull-request creation time");
   }
   const marker = `<!-- ci-tools:dependabot-review ${repository}#${number} -->`;
   const assignee = "toddagent01";
@@ -80,8 +83,12 @@ function routeHeldPull({ repository, number, expectedHead, gh, stillHeld, review
   // creator identity proves workflow-owned work, including closed decisions.
   const workflowBotId = 41898282;
   const trustedCreator = (issue) => issue?.user?.id === workflowBotId && issue.user.type === "Bot";
+  // Bound the scan without trusting it: review work for this PR is created by
+  // the bot after the PR opened, so `creator` and `since` (updated at or after)
+  // cannot drop it, and the list stays small however long the issue history
+  // grows. The checks below still authenticate whatever the filter returns.
   const pages = gh([
-    "api", `repos/${repository}/issues?state=all&per_page=100`, "--paginate",
+    "api", `repos/${repository}/issues?state=all&creator=github-actions%5Bbot%5D&since=${pullCreatedAt}&per_page=100`, "--paginate",
     // Filter before gh returns the body: a large repository's issue history
     // otherwise exceeds execFileSync's output buffer. JSON quoting is jq-safe.
     "--jq", `[.[] | select(.pull_request == null and .user.id == ${workflowBotId} and .user.type == "Bot" and ((.body // "" | split("\\n") | index(${JSON.stringify(marker)})) != null))] | @json`,
@@ -186,6 +193,7 @@ export function armAutoMerge({
     if (!trustedOpenPull(facts) || eligibleUpdate(facts)) return "Not routed: no held trusted update";
     return routeHeldPull({
       repository, number, expectedHead, gh, reviewPriorityFieldId,
+      pullCreatedAt: pullRequest.created_at,
       stillHeld: () => {
         const fresh = { ...facts, pullRequest: JSON.parse(gh(["api", `repos/${repository}/pulls/${number}`])) };
         return trustedOpenPull(fresh) && !eligibleUpdate(fresh);
