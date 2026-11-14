@@ -1,0 +1,40 @@
+{
+  "source": "gh api repos/todd-studio/ci-tools/issues/47/timeline --paginate — captured 2026-11-14 on toddagent01@mac-main; trimmed to the cross-referenced events from workstation issue 5745 and ci-tools PR 48, and to their routing fields",
+  "reply": [
+    {
+      "event": "cross-referenced",
+      "source": {
+        "issue": {
+          "number": 5745,
+          "repository_url": "https://api.github.com/repos/todd-studio/workstation",
+          "state": "closed",
+          "user": {
+            "id": 328930027,
+            "login": "toddagent02",
+            "type": "User"
+          }
+        },
+        "type": "issue"
+      }
+    },
+    {
+      "event": "cross-referenced",
+      "source": {
+        "issue": {
+          "number": 48,
+          "pull_request": {
+            "merged_at": "2026-11-10T05:28:52Z"
+          },
+          "repository_url": "https://api.github.com/repos/todd-studio/ci-tools",
+          "state": "closed",
+          "user": {
+            "id": 328930027,
+            "login": "toddagent02",
+            "type": "User"
+          }
+        },
+        "type": "issue"
+      }
+    }
+  ]
+}

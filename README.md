@@ -333,9 +333,15 @@ Use the workflow token with `issues: write` for that step, as shown above; the m
 new permissions. GitHub may suppress the issue webhook for this token, so discovery relies on the
 router's assigned-open-issue sweep. Keep all calls serialized in the existing per-PR concurrency
 group with `cancel-in-progress: false`: the API has no atomic create-if-absent operation. Routing
-reads every page of repository issues directly, including closed work, and matches a stable body
-marker keyed by repository and PR number, never by head SHA, only on issues created by the
-GitHub Actions bot's immutable ID and Bot type. A copied marker from another creator is ignored,
+reads the source PR's own timeline, where GitHub cross-references the review issue because its
+body links the PR, so the lookup grows with that PR's activity, never with the repository's issue
+history. That cross-reference appears a moment after the create, and no GitHub issue read is
+immediately consistent, so a create reports success only once the timeline shows the new issue
+and otherwise fails the step after about 30 seconds; a run interrupted inside that window and
+rerun at once can still file a second issue. It sees closed work too, and matches a stable body
+marker keyed by repository and PR number, never by head SHA, only on issues in this repository
+created by the GitHub Actions bot's immutable ID and Bot type. A copied marker from another
+creator, or from the same bot in another repository, is ignored,
 including on closed issues; unrelated issue text never receives assignment through this helper.
 Repeated runs and later heads reuse
 that issue; open work missing metadata or its assignment is repaired, preserving later type and
